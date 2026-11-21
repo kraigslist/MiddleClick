@@ -415,27 +415,11 @@ static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPo
     CFRelease(mouseEvent);
 }
 
+/// Returns NO when the setting has never been written.
 - (BOOL)getIsSystemTapToClickDisabled {
-  NSString* isSystemTapToClickEnabled = [self runCommand:(@"defaults read com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking")];
-  return [isSystemTapToClickEnabled isEqualToString:@"0\n"];
-}
-
-- (NSString *)runCommand:(NSString *)commandToRun {
-  NSPipe* pipe = [NSPipe pipe];
-  
-  NSTask* task = [NSTask new];
-  [task setLaunchPath: @"/bin/sh"];
-  [task setArguments:@[@"-c", [NSString stringWithFormat:@"%@", commandToRun]]];
-  [task setStandardOutput:pipe];
-  
-  NSFileHandle* file = [pipe fileHandleForReading];
-  [task launch];
-  
-  NSString *output = [[NSString alloc] initWithData:[file readDataToEndOfFile] encoding:NSUTF8StringEncoding];
-  
-  [task release];
-  
-  return [output autorelease];
+  Boolean isDefined = false;
+  Boolean isEnabled = CFPreferencesGetAppBooleanValue(CFSTR("Clicking"), CFSTR("com.apple.driver.AppleBluetoothMultitouch.trackpad"), &isDefined);
+  return isDefined && !isEnabled;
 }
 
 @end
