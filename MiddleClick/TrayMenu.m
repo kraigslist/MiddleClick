@@ -19,6 +19,7 @@
 
   [self updateAccessibilityPermissionStatus:menu
                  hasAccessibilityPermission:hasAccessibilityPermission];
+  [myController setAccessibilityTrusted:hasAccessibilityPermission];
 
   if (!hasAccessibilityPermission) {
     [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:NO block:^(NSTimer* timer) {
@@ -167,7 +168,25 @@
 
   [self initAccessibilityPermissionStatus:menu];
   
+  [[NSDistributedNotificationCenter defaultCenter] addObserver:self
+                                                      selector:@selector(receiveAccessibilityNote:)
+                                                          name:@"com.apple.accessibility.api"
+                                                        object:nil
+                                            suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
+  
   [menu release];
+}
+
+/// Posted whenever any app's Accessibility permission changes. `AXIsProcessTrusted` lags behind it, hence the delay.
+- (void)receiveAccessibilityNote:(NSNotification*)note
+{
+  BOOL isAlreadyPolling = !accessibilityPermissionStatusItem.hidden;
+  if (isAlreadyPolling) {
+    return;
+  }
+  [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer* timer) {
+    [self initAccessibilityPermissionStatus:self->_statusItem.menu];
+  }];
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender

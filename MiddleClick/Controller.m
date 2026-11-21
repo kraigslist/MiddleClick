@@ -183,9 +183,21 @@ static void unregisterTouchCallback(void)
     } else {
         NSLog(@"Couldn't create event tap! Check accessibility permissions.");
         [[NSUserDefaults standardUserDefaults] setBool:1 forKey:@"NSStatusItem Visible Item-0"];
-        [self scheduleRestart:5];
     }
 }
+
+/// A default event tap that loses its permission can block all mouse input, so it must be removed as soon as the permission is revoked.
+- (void)setAccessibilityTrusted:(BOOL)isTrusted
+{
+  if (isTrusted && !currentEventTap) {
+    NSLog(@"Accessibility permission granted, starting mouse listener...");
+    [self registerMouseCallback];
+  } else if (!isTrusted && currentEventTap) {
+    NSLog(@"Accessibility permission revoked, stopping mouse listener...");
+    unregisterMouseCallback();
+  }
+}
+
 static void unregisterMouseCallback(void)
 {
     // Remove from the current run loop.
