@@ -25,7 +25,9 @@ int main(int argc, char* argv[])
   NSApplication* app = [NSApplication sharedApplication];
   
   Controller* con = [Controller new];
-  [con start];
+  @autoreleasepool {
+    [con start];
+  }
   
   // add Menu Bar item
   TrayMenu* menu = [[TrayMenu alloc] initWithController:con];

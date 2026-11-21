@@ -33,7 +33,6 @@ typedef void* MTDeviceRef;
 typedef int (*MTContactCallbackFunction)(int, Finger*, int, double, int);
 MTDeviceRef MTDeviceCreateDefault(void);
 CFMutableArrayRef MTDeviceCreateList(void);
-void MTDeviceRelease(MTDeviceRef);
 void MTRegisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 void MTUnregisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 void MTDeviceStart(MTDeviceRef, int); // thanks comex
@@ -54,7 +53,7 @@ double maxTimeDelta;
 BOOL threeDown;
 BOOL maybeMiddleClick;
 BOOL wasThreeDown;
-NSMutableArray* currentDeviceList;
+CFMutableArrayRef currentDeviceList;
 CFMachPortRef currentEventTap;
 CFRunLoopSourceRef currentRunLoopSource;
 
@@ -75,9 +74,6 @@ CFRunLoopSourceRef currentRunLoopSource;
   
   NSString* needToClickNullable = [[NSUserDefaults standardUserDefaults] valueForKey:@"needClick"];
   needToClick = needToClickNullable ? [[NSUserDefaults standardUserDefaults] boolForKey:@"needClick"] : [self getIsSystemTapToClickDisabled];
-  
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
-  [NSApplication sharedApplication];
   
   registerTouchCallback();
   
@@ -115,7 +111,7 @@ CFRunLoopSourceRef currentRunLoopSource;
   // reconifguration of Core Graphics
   CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallBack, self);
   
-  [self registerMouseCallback:pool];
+  [self registerMouseCallback];
 }
 
 static void stopUnstableListeners(void)
@@ -129,38 +125,40 @@ static void stopUnstableListeners(void)
 - (void)startUnstableListeners
 {
   NSLog(@"Starting unstable listeners...");
-    
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
 
   registerTouchCallback();
-  [self registerMouseCallback:pool];
+  [self registerMouseCallback];
 }
 
 static void registerTouchCallback(void)
 {
     /// Get list of all multi touch devices
-    NSMutableArray* deviceList = (NSMutableArray*)MTDeviceCreateList(); // grab our device list
-    currentDeviceList = deviceList;
+    currentDeviceList = MTDeviceCreateList();
 
     // Iterate and register callbacks for multitouch devices.
-    for (int i = 0; i < [deviceList count]; i++) // iterate available devices
+    for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
-      registerMTDeviceCallback((MTDeviceRef)[deviceList objectAtIndex:i], touchCallback);
+      registerMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
     }
 }
 static void unregisterTouchCallback(void)
 {
-    /// Get list of all multi touch devices
-    NSMutableArray* deviceList = currentDeviceList; // grab our device list
+    if (!currentDeviceList) {
+      return;
+    }
 
     // Iterate and unregister callbacks for multitouch devices.
-    for (int i = 0; i < [deviceList count]; i++) // iterate available devices
+    for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
-      unregisterMTDeviceCallback((MTDeviceRef)[deviceList objectAtIndex:i], touchCallback);
+      unregisterMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
     }
+
+    // The list holds the only reference to each device, so this releases the devices too.
+    CFRelease(currentDeviceList);
+    currentDeviceList = NULL;
 }
 
-- (void)registerMouseCallback:(NSAutoreleasePool*)pool
+- (void)registerMouseCallback
 {
     /// we only want to see left mouse down and left mouse up, because we only want
     /// to change that one
@@ -182,9 +180,6 @@ static void unregisterTouchCallback(void)
 
         // Enable the event tap.
         CGEventTapEnable(eventTap, true);
-
-        // release pool before exit
-        [pool release];
     } else {
         NSLog(@"Couldn't create event tap! Check accessibility permissions.");
         [[NSUserDefaults standardUserDefaults] setBool:1 forKey:@"NSStatusItem Visible Item-0"];
@@ -196,10 +191,15 @@ static void unregisterMouseCallback(void)
     // Remove from the current run loop.
     if (currentRunLoopSource) {
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), currentRunLoopSource, kCFRunLoopCommonModes);
+        CFRelease(currentRunLoopSource);
+        currentRunLoopSource = NULL;
     }
-    // Disable the event tap.
+    // Disable and destroy the event tap.
     if (currentEventTap) {
         CGEventTapEnable(currentEventTap, false);
+        CFMachPortInvalidate(currentEventTap);
+        CFRelease(currentEventTap);
+        currentEventTap = NULL;
     }
 }
 
@@ -407,7 +407,6 @@ static void registerMTDeviceCallback(MTDeviceRef device, MTContactCallbackFuncti
 static void unregisterMTDeviceCallback(MTDeviceRef device, MTContactCallbackFunction callback) {
     MTUnregisterContactFrameCallback(device, callback); // unassign callback for device
     MTDeviceStop(device); // stop sending events
-    MTDeviceRelease(device);
 }
 
 static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPoint ourLoc) {
