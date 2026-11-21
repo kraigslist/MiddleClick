@@ -33,7 +33,6 @@ typedef void* MTDeviceRef;
 typedef int (*MTContactCallbackFunction)(int, Finger*, int, double, int);
 MTDeviceRef MTDeviceCreateDefault(void);
 CFMutableArrayRef MTDeviceCreateList(void);
-void MTDeviceRelease(MTDeviceRef);
 void MTRegisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 void MTUnregisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 void MTDeviceStart(MTDeviceRef, int); // thanks comex
@@ -41,16 +40,20 @@ void MTDeviceStop(MTDeviceRef);
 
 #pragma mark Globals
 
-NSDate* touchStartTime;
+BOOL isTouching;
+double touchStartTime;
+int previousFingerCount;
 float middleclickX, middleclickY;
 float middleclickX2, middleclickY2;
 
 BOOL needToClick;
 long fingersQua;
+float maxDistanceDelta;
+double maxTimeDelta;
 BOOL threeDown;
 BOOL maybeMiddleClick;
 BOOL wasThreeDown;
-NSMutableArray* currentDeviceList;
+CFMutableArrayRef currentDeviceList;
 CFMachPortRef currentEventTap;
 CFRunLoopSourceRef currentRunLoopSource;
 
@@ -58,6 +61,7 @@ CFRunLoopSourceRef currentRunLoopSource;
 
 @implementation Controller {
   NSTimer* _restartTimer __weak; // Using `weak` so that the pointer is automatically set to `nil` when the referenced object is released ( https://en.wikipedia.org/wiki/Automatic_Reference_Counting#Zeroing_Weak_References ). This helps preventing fatal EXC_BAD_ACCESS.
+  BOOL _isUserSessionActive;
 }
 
 - (void)start
@@ -66,14 +70,12 @@ CFRunLoopSourceRef currentRunLoopSource;
 
   threeDown = NO;
   wasThreeDown = NO;
+  _isUserSessionActive = YES;
   
-  fingersQua = [[NSUserDefaults standardUserDefaults] integerForKey:kFingersNum];
+  loadTouchSettings();
   
   NSString* needToClickNullable = [[NSUserDefaults standardUserDefaults] valueForKey:@"needClick"];
   needToClick = needToClickNullable ? [[NSUserDefaults standardUserDefaults] boolForKey:@"needClick"] : [self getIsSystemTapToClickDisabled];
-  
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
-  [NSApplication sharedApplication];
   
   registerTouchCallback();
   
@@ -82,6 +84,19 @@ CFRunLoopSourceRef currentRunLoopSource;
    addObserver:self
    selector:@selector(receiveWakeNote:)
    name:NSWorkspaceDidWakeNotification
+   object:NULL];
+  
+  // Multitouch devices registered from more than one logged-in session stop delivering frames,
+  // so listen only while this user's session is on the console.
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+   addObserver:self
+   selector:@selector(receiveSessionResignActiveNote:)
+   name:NSWorkspaceSessionDidResignActiveNotification
+   object:NULL];
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+   addObserver:self
+   selector:@selector(receiveSessionBecomeActiveNote:)
+   name:NSWorkspaceSessionDidBecomeActiveNotification
    object:NULL];
   
   // Register IOService notifications for added devices.
@@ -110,8 +125,8 @@ CFRunLoopSourceRef currentRunLoopSource;
   // when displays are reconfigured restart of the app is needed, so add a calback to the
   // reconifguration of Core Graphics
   CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallBack, self);
-  
-  [self registerMouseCallback:pool];
+
+  [self updateMouseCallback];
 }
 
 static void stopUnstableListeners(void)
@@ -125,38 +140,40 @@ static void stopUnstableListeners(void)
 - (void)startUnstableListeners
 {
   NSLog(@"Starting unstable listeners...");
-    
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
 
   registerTouchCallback();
-  [self registerMouseCallback:pool];
+  [self updateMouseCallback];
 }
 
 static void registerTouchCallback(void)
 {
     /// Get list of all multi touch devices
-    NSMutableArray* deviceList = (NSMutableArray*)MTDeviceCreateList(); // grab our device list
-    currentDeviceList = deviceList;
+    currentDeviceList = MTDeviceCreateList();
 
     // Iterate and register callbacks for multitouch devices.
-    for (int i = 0; i < [deviceList count]; i++) // iterate available devices
+    for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
-      registerMTDeviceCallback((MTDeviceRef)[deviceList objectAtIndex:i], touchCallback);
+      registerMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
     }
 }
 static void unregisterTouchCallback(void)
 {
-    /// Get list of all multi touch devices
-    NSMutableArray* deviceList = currentDeviceList; // grab our device list
+    if (!currentDeviceList) {
+      return;
+    }
 
     // Iterate and unregister callbacks for multitouch devices.
-    for (int i = 0; i < [deviceList count]; i++) // iterate available devices
+    for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
-      unregisterMTDeviceCallback((MTDeviceRef)[deviceList objectAtIndex:i], touchCallback);
+      unregisterMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
     }
+
+    // The list holds the only reference to each device, so this releases the devices too.
+    CFRelease(currentDeviceList);
+    currentDeviceList = NULL;
 }
 
-- (void)registerMouseCallback:(NSAutoreleasePool*)pool
+- (void)registerMouseCallback
 {
     /// we only want to see left mouse down and left mouse up, because we only want
     /// to change that one
@@ -178,30 +195,60 @@ static void unregisterTouchCallback(void)
 
         // Enable the event tap.
         CGEventTapEnable(eventTap, true);
-
-        // release pool before exit
-        [pool release];
     } else {
         NSLog(@"Couldn't create event tap! Check accessibility permissions.");
         [[NSUserDefaults standardUserDefaults] setBool:1 forKey:@"NSStatusItem Visible Item-0"];
-        [self scheduleRestart:5];
     }
 }
+
+/// A default event tap that loses its permission can block all mouse input, so it must be removed as soon as the permission is revoked.
+- (void)setAccessibilityTrusted:(BOOL)isTrusted
+{
+  if (isTrusted) {
+    [self updateMouseCallback];
+  } else if (currentEventTap) {
+    NSLog(@"Accessibility permission revoked, stopping mouse listener...");
+    unregisterMouseCallback();
+  }
+}
+
+/// Only click mode needs the tap. In tap mode the touch callback posts middle clicks itself,
+/// so the system's clicks don't have to wait on this app.
+- (void)updateMouseCallback
+{
+  BOOL isNeeded = needToClick && _isUserSessionActive;
+  if (isNeeded && !currentEventTap) {
+    [self registerMouseCallback];
+  } else if (!isNeeded && currentEventTap) {
+    unregisterMouseCallback();
+  }
+}
+
 static void unregisterMouseCallback(void)
 {
     // Remove from the current run loop.
     if (currentRunLoopSource) {
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), currentRunLoopSource, kCFRunLoopCommonModes);
+        CFRelease(currentRunLoopSource);
+        currentRunLoopSource = NULL;
     }
-    // Disable the event tap.
+    // Disable and destroy the event tap.
     if (currentEventTap) {
         CGEventTapEnable(currentEventTap, false);
+        CFMachPortInvalidate(currentEventTap);
+        CFRelease(currentEventTap);
+        currentEventTap = NULL;
     }
 }
 
 /// Schedule listeners to be restarted, if a restart is pending, delay it.
 - (void)scheduleRestart:(NSTimeInterval)delay
 {
+  if (!_isUserSessionActive) {
+    NSLog(@"User session is inactive, skipping restart");
+    return;
+  }
+  
   if (_restartTimer != nil) { // Check whether the timer object was not released.
     [_restartTimer invalidate]; // Invalidate any existing timer.
   }
@@ -221,6 +268,21 @@ static void unregisterMouseCallback(void)
   [self scheduleRestart:10];
 }
 
+- (void)receiveSessionResignActiveNote:(NSNotification*)note
+{
+  NSLog(@"User session resigned active, stopping listeners...");
+  _isUserSessionActive = NO;
+  [_restartTimer invalidate];
+  stopUnstableListeners();
+}
+
+- (void)receiveSessionBecomeActiveNote:(NSNotification*)note
+{
+  NSLog(@"User session became active, restarting...");
+  _isUserSessionActive = YES;
+  [self restartListeners];
+}
+
 - (BOOL)getClickMode
 {
   return needToClick;
@@ -230,11 +292,13 @@ static void unregisterMouseCallback(void)
 {
   [[NSUserDefaults standardUserDefaults] setBool:click forKey:@"needClick"];
   needToClick = click;
+  [self updateMouseCallback];
 }
 - (void)resetClickMode
 {
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"needClick"];
   needToClick = [self getIsSystemTapToClickDisabled];
+  [self updateMouseCallback];
 }
 
 /// listening to mouse clicks to replace them with middle clicks if there are 3
@@ -246,6 +310,13 @@ static void unregisterMouseCallback(void)
 CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
                          CGEventRef event, void* refcon)
 {
+  // macOS disables a tap that responds too slowly, and does not re-enable it on its own.
+  if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+    NSLog(@"Event tap was disabled by the system, re-enabling...");
+    CGEventTapEnable(currentEventTap, true);
+    return event;
+  }
+  
   if (needToClick) {
     if (threeDown && type == kCGEventLeftMouseDown) {
       wasThreeDown = YES;
@@ -265,22 +336,34 @@ CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
   return event;
 }
 
+/// Read once per gesture rather than per frame, so that `defaults write` still applies without a relaunch.
+static void loadTouchSettings(void)
+{
+  @autoreleasepool {
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    fingersQua = [defaults integerForKey:kFingersNum];
+    maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta];
+    maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0;
+  }
+}
+
 /// Mulittouch callback, see what is touched. If 3 are on the mouse set
 /// threedowns, else unset threedowns.
+/// Runs for every frame while touching, so it must not allocate.
 int touchCallback(int device, Finger* data, int nFingers, double timestamp,
                   int frame)
 {
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
-  fingersQua = [[NSUserDefaults standardUserDefaults] integerForKey:kFingersNum];
-  float maxDistanceDelta = [[NSUserDefaults standardUserDefaults] floatForKey:kMaxDistanceDelta];
-  float maxTimeDelta = [[NSUserDefaults standardUserDefaults] integerForKey:kMaxTimeDeltaMs] / 1000.f;
+  if (nFingers > 0 && previousFingerCount == 0) {
+    loadTouchSettings();
+  }
+  previousFingerCount = nFingers;
   
   if (needToClick) {
     threeDown = nFingers == fingersQua;
   } else {
     if (nFingers == 0) {
-      NSTimeInterval elapsedTime = touchStartTime ? -[touchStartTime timeIntervalSinceNow] : 0;
-      touchStartTime = NULL;
+      double elapsedTime = isTouching ? timestamp - touchStartTime : 0;
+      isTouching = NO;
       if (middleclickX + middleclickY && elapsedTime <= maxTimeDelta) {
         float delta = ABS(middleclickX - middleclickX2) + ABS(middleclickY - middleclickY2);
         if (delta < maxDistanceDelta) {
@@ -297,17 +380,16 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
           postMouseEvent(kCGEventOtherMouseUp, buttonType, ourLoc);
         }
       }
-    } else if (nFingers > 0 && touchStartTime == NULL) {
-      NSDate* now = [NSDate new];
-      touchStartTime = [now retain];
-      [now release];
+    } else if (nFingers > 0 && !isTouching) {
+      isTouching = YES;
+      touchStartTime = timestamp;
       
       maybeMiddleClick = YES;
       middleclickX = 0.0f;
       middleclickY = 0.0f;
     } else {
       if (maybeMiddleClick == YES) {
-        NSTimeInterval elapsedTime = -[touchStartTime timeIntervalSinceNow];
+        double elapsedTime = timestamp - touchStartTime;
         if (elapsedTime > maxTimeDelta)
           maybeMiddleClick = NO;
       }
@@ -343,7 +425,6 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
     }
   }
   
-  [pool release];
   return 0;
 }
 
@@ -386,7 +467,6 @@ static void registerMTDeviceCallback(MTDeviceRef device, MTContactCallbackFuncti
 static void unregisterMTDeviceCallback(MTDeviceRef device, MTContactCallbackFunction callback) {
     MTUnregisterContactFrameCallback(device, callback); // unassign callback for device
     MTDeviceStop(device); // stop sending events
-    MTDeviceRelease(device);
 }
 
 static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPoint ourLoc) {
@@ -395,27 +475,11 @@ static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPo
     CFRelease(mouseEvent);
 }
 
+/// Returns NO when the setting has never been written.
 - (BOOL)getIsSystemTapToClickDisabled {
-  NSString* isSystemTapToClickEnabled = [self runCommand:(@"defaults read com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking")];
-  return [isSystemTapToClickEnabled isEqualToString:@"0\n"];
-}
-
-- (NSString *)runCommand:(NSString *)commandToRun {
-  NSPipe* pipe = [NSPipe pipe];
-  
-  NSTask* task = [NSTask new];
-  [task setLaunchPath: @"/bin/sh"];
-  [task setArguments:@[@"-c", [NSString stringWithFormat:@"%@", commandToRun]]];
-  [task setStandardOutput:pipe];
-  
-  NSFileHandle* file = [pipe fileHandleForReading];
-  [task launch];
-  
-  NSString *output = [[NSString alloc] initWithData:[file readDataToEndOfFile] encoding:NSUTF8StringEncoding];
-  
-  [task release];
-  
-  return [output autorelease];
+  Boolean isDefined = false;
+  Boolean isEnabled = CFPreferencesGetAppBooleanValue(CFSTR("Clicking"), CFSTR("com.apple.driver.AppleBluetoothMultitouch.trackpad"), &isDefined);
+  return isDefined && !isEnabled;
 }
 
 @end
