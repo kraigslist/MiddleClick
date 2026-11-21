@@ -61,6 +61,7 @@ CFRunLoopSourceRef currentRunLoopSource;
 
 @implementation Controller {
   NSTimer* _restartTimer __weak; // Using `weak` so that the pointer is automatically set to `nil` when the referenced object is released ( https://en.wikipedia.org/wiki/Automatic_Reference_Counting#Zeroing_Weak_References ). This helps preventing fatal EXC_BAD_ACCESS.
+  BOOL _isUserSessionActive;
 }
 
 - (void)start
@@ -69,6 +70,7 @@ CFRunLoopSourceRef currentRunLoopSource;
 
   threeDown = NO;
   wasThreeDown = NO;
+  _isUserSessionActive = YES;
   
   loadTouchSettings();
   
@@ -82,6 +84,19 @@ CFRunLoopSourceRef currentRunLoopSource;
    addObserver:self
    selector:@selector(receiveWakeNote:)
    name:NSWorkspaceDidWakeNotification
+   object:NULL];
+  
+  // Multitouch devices registered from more than one logged-in session stop delivering frames,
+  // so listen only while this user's session is on the console.
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+   addObserver:self
+   selector:@selector(receiveSessionResignActiveNote:)
+   name:NSWorkspaceSessionDidResignActiveNotification
+   object:NULL];
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+   addObserver:self
+   selector:@selector(receiveSessionBecomeActiveNote:)
+   name:NSWorkspaceSessionDidBecomeActiveNotification
    object:NULL];
   
   // Register IOService notifications for added devices.
@@ -189,7 +204,7 @@ static void unregisterTouchCallback(void)
 /// A default event tap that loses its permission can block all mouse input, so it must be removed as soon as the permission is revoked.
 - (void)setAccessibilityTrusted:(BOOL)isTrusted
 {
-  if (isTrusted && !currentEventTap) {
+  if (isTrusted && !currentEventTap && _isUserSessionActive) {
     NSLog(@"Accessibility permission granted, starting mouse listener...");
     [self registerMouseCallback];
   } else if (!isTrusted && currentEventTap) {
@@ -218,6 +233,11 @@ static void unregisterMouseCallback(void)
 /// Schedule listeners to be restarted, if a restart is pending, delay it.
 - (void)scheduleRestart:(NSTimeInterval)delay
 {
+  if (!_isUserSessionActive) {
+    NSLog(@"User session is inactive, skipping restart");
+    return;
+  }
+  
   if (_restartTimer != nil) { // Check whether the timer object was not released.
     [_restartTimer invalidate]; // Invalidate any existing timer.
   }
@@ -235,6 +255,21 @@ static void unregisterMouseCallback(void)
 {
   NSLog(@"System woke up, restarting...");
   [self scheduleRestart:10];
+}
+
+- (void)receiveSessionResignActiveNote:(NSNotification*)note
+{
+  NSLog(@"User session resigned active, stopping listeners...");
+  _isUserSessionActive = NO;
+  [_restartTimer invalidate];
+  stopUnstableListeners();
+}
+
+- (void)receiveSessionBecomeActiveNote:(NSNotification*)note
+{
+  NSLog(@"User session became active, restarting...");
+  _isUserSessionActive = YES;
+  [self restartListeners];
 }
 
 - (BOOL)getClickMode
