@@ -250,6 +250,13 @@ static void unregisterMouseCallback(void)
 CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
                          CGEventRef event, void* refcon)
 {
+  // macOS disables a tap that responds too slowly, and does not re-enable it on its own.
+  if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+    NSLog(@"Event tap was disabled by the system, re-enabling...");
+    CGEventTapEnable(currentEventTap, true);
+    return event;
+  }
+  
   if (needToClick) {
     if (threeDown && type == kCGEventLeftMouseDown) {
       wasThreeDown = YES;
