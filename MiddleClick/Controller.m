@@ -41,12 +41,16 @@ void MTDeviceStop(MTDeviceRef);
 
 #pragma mark Globals
 
-NSDate* touchStartTime;
+BOOL isTouching;
+double touchStartTime;
+int previousFingerCount;
 float middleclickX, middleclickY;
 float middleclickX2, middleclickY2;
 
 BOOL needToClick;
 long fingersQua;
+float maxDistanceDelta;
+double maxTimeDelta;
 BOOL threeDown;
 BOOL maybeMiddleClick;
 BOOL wasThreeDown;
@@ -67,7 +71,7 @@ CFRunLoopSourceRef currentRunLoopSource;
   threeDown = NO;
   wasThreeDown = NO;
   
-  fingersQua = [[NSUserDefaults standardUserDefaults] integerForKey:kFingersNum];
+  loadTouchSettings();
   
   NSString* needToClickNullable = [[NSUserDefaults standardUserDefaults] valueForKey:@"needClick"];
   needToClick = needToClickNullable ? [[NSUserDefaults standardUserDefaults] boolForKey:@"needClick"] : [self getIsSystemTapToClickDisabled];
@@ -265,22 +269,34 @@ CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
   return event;
 }
 
+/// Read once per gesture rather than per frame, so that `defaults write` still applies without a relaunch.
+static void loadTouchSettings(void)
+{
+  @autoreleasepool {
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    fingersQua = [defaults integerForKey:kFingersNum];
+    maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta];
+    maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0;
+  }
+}
+
 /// Mulittouch callback, see what is touched. If 3 are on the mouse set
 /// threedowns, else unset threedowns.
+/// Runs for every frame while touching, so it must not allocate.
 int touchCallback(int device, Finger* data, int nFingers, double timestamp,
                   int frame)
 {
-  NSAutoreleasePool* pool = [NSAutoreleasePool new];
-  fingersQua = [[NSUserDefaults standardUserDefaults] integerForKey:kFingersNum];
-  float maxDistanceDelta = [[NSUserDefaults standardUserDefaults] floatForKey:kMaxDistanceDelta];
-  float maxTimeDelta = [[NSUserDefaults standardUserDefaults] integerForKey:kMaxTimeDeltaMs] / 1000.f;
+  if (nFingers > 0 && previousFingerCount == 0) {
+    loadTouchSettings();
+  }
+  previousFingerCount = nFingers;
   
   if (needToClick) {
     threeDown = nFingers == fingersQua;
   } else {
     if (nFingers == 0) {
-      NSTimeInterval elapsedTime = touchStartTime ? -[touchStartTime timeIntervalSinceNow] : 0;
-      touchStartTime = NULL;
+      double elapsedTime = isTouching ? timestamp - touchStartTime : 0;
+      isTouching = NO;
       if (middleclickX + middleclickY && elapsedTime <= maxTimeDelta) {
         float delta = ABS(middleclickX - middleclickX2) + ABS(middleclickY - middleclickY2);
         if (delta < maxDistanceDelta) {
@@ -297,17 +313,16 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
           postMouseEvent(kCGEventOtherMouseUp, buttonType, ourLoc);
         }
       }
-    } else if (nFingers > 0 && touchStartTime == NULL) {
-      NSDate* now = [NSDate new];
-      touchStartTime = [now retain];
-      [now release];
+    } else if (nFingers > 0 && !isTouching) {
+      isTouching = YES;
+      touchStartTime = timestamp;
       
       maybeMiddleClick = YES;
       middleclickX = 0.0f;
       middleclickY = 0.0f;
     } else {
       if (maybeMiddleClick == YES) {
-        NSTimeInterval elapsedTime = -[touchStartTime timeIntervalSinceNow];
+        double elapsedTime = timestamp - touchStartTime;
         if (elapsedTime > maxTimeDelta)
           maybeMiddleClick = NO;
       }
@@ -343,7 +358,6 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
     }
   }
   
-  [pool release];
   return 0;
 }
 
