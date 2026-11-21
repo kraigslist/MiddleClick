@@ -125,8 +125,8 @@ CFRunLoopSourceRef currentRunLoopSource;
   // when displays are reconfigured restart of the app is needed, so add a calback to the
   // reconifguration of Core Graphics
   CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallBack, self);
-  
-  [self registerMouseCallback];
+
+  [self updateMouseCallback];
 }
 
 static void stopUnstableListeners(void)
@@ -142,7 +142,7 @@ static void stopUnstableListeners(void)
   NSLog(@"Starting unstable listeners...");
 
   registerTouchCallback();
-  [self registerMouseCallback];
+  [self updateMouseCallback];
 }
 
 static void registerTouchCallback(void)
@@ -204,11 +204,22 @@ static void unregisterTouchCallback(void)
 /// A default event tap that loses its permission can block all mouse input, so it must be removed as soon as the permission is revoked.
 - (void)setAccessibilityTrusted:(BOOL)isTrusted
 {
-  if (isTrusted && !currentEventTap && _isUserSessionActive) {
-    NSLog(@"Accessibility permission granted, starting mouse listener...");
-    [self registerMouseCallback];
-  } else if (!isTrusted && currentEventTap) {
+  if (isTrusted) {
+    [self updateMouseCallback];
+  } else if (currentEventTap) {
     NSLog(@"Accessibility permission revoked, stopping mouse listener...");
+    unregisterMouseCallback();
+  }
+}
+
+/// Only click mode needs the tap. In tap mode the touch callback posts middle clicks itself,
+/// so the system's clicks don't have to wait on this app.
+- (void)updateMouseCallback
+{
+  BOOL isNeeded = needToClick && _isUserSessionActive;
+  if (isNeeded && !currentEventTap) {
+    [self registerMouseCallback];
+  } else if (!isNeeded && currentEventTap) {
     unregisterMouseCallback();
   }
 }
@@ -281,11 +292,13 @@ static void unregisterMouseCallback(void)
 {
   [[NSUserDefaults standardUserDefaults] setBool:click forKey:@"needClick"];
   needToClick = click;
+  [self updateMouseCallback];
 }
 - (void)resetClickMode
 {
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"needClick"];
   needToClick = [self getIsSystemTapToClickDisabled];
+  [self updateMouseCallback];
 }
 
 /// listening to mouse clicks to replace them with middle clicks if there are 3
