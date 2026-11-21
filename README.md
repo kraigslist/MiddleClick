@@ -1,5 +1,5 @@
-<a href="https://github.com/artginzburg/MiddleClick-Sonoma/releases">
-  <img align="right" src="https://img.shields.io/github/downloads/artginzburg/middleclick-sonoma/total?color=teal" title="GitHub All Releases">
+<a href="https://github.com/kraigslist/MiddleClick/releases">
+  <img align="right" src="https://img.shields.io/github/downloads/kraigslist/MiddleClick/total?color=teal" title="GitHub All Releases">
 </a>
 
 <div align="center">
@@ -59,15 +59,15 @@ brew install --cask --no-quarantine middleclick
 
 <details>
   <summary>
-    <a href="https://github.com/artginzburg/MiddleClick-Sonoma/releases/latest/download/MiddleClick.zip">
+    <a href="https://github.com/kraigslist/MiddleClick/releases/latest">
       Latest Release
     </a>&nbsp·&nbsp
-    <a href="https://github.com/artginzburg/MiddleClick-Sonoma/releases/latest">
-      <img align="center" alt="GitHub release" src="https://img.shields.io/github/release/artginzburg/middleclick-Sonoma?label=%20&color=gray">
+    <a href="https://github.com/kraigslist/MiddleClick/releases/latest">
+      <img align="center" alt="GitHub release" src="https://img.shields.io/github/release/kraigslist/MiddleClick?label=%20&color=gray">
     </a>
   </summary>
 
-> Additionally, you may also view <a href="https://github.com/artginzburg/MiddleClick-Sonoma/releases">Earlier Releases</a>
+> Additionally, you may also view <a href="https://github.com/kraigslist/MiddleClick/releases">Earlier Releases</a>
 
 </details>
 
