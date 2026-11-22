@@ -80,4 +80,4 @@ Each action is one callout on the main run loop. Every handler above runs there,
 3. When you fix a lifecycle bug, add it as a `Bug` value, with the invariant it must break, to both the model and `scripts/model-check.sh`.
 4. After confirming that the model describes the code at a newer commit, move the sync commit below forward. Moving it without that check makes the record a lie.
 
-Last synced with the code at commit `c09b663` (`Derive installed listeners from one state in updateListeners`).
+Last synced with the code at commit `fbe1c46` (`Delete comments that restate code, and name what they explained`).
