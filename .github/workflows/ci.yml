@@ -13,4 +13,11 @@ jobs:
         with:
           fetch-depth: 0
       - run: scripts/build.sh
+      - run: scripts/test.sh
       - run: scripts/replay-past-bugs.sh
+
+  xcode:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -project MiddleClick.xcodeproj -scheme MiddleClick -configuration Release CODE_SIGNING_ALLOWED=NO build
