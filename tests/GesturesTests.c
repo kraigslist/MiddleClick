@@ -20,8 +20,7 @@ typedef struct {
   double time;
 } Frame;
 
-/// Fingers sit side by side and move right by `slide`. Slots past `fingers` hold values that change every frame,
-/// as the multitouch driver's buffer can.
+/// Slots past `fingers` hold values that change every frame, as the multitouch driver's buffer can.
 static int countTaps(const GestureSettings* settings, const Frame* frames, int count)
 {
   TapState tap = {0};
@@ -33,7 +32,7 @@ static int countTaps(const GestureSettings* settings, const Frame* frames, int c
       buffer[i].normalized.pos.x = isTouching ? 0.3f + 0.1f * i + frames[f].slide : 0.05f * f;
       buffer[i].normalized.pos.y = isTouching ? 0.5f : 0.07f * f;
     }
-    taps += TapFrame(&tap, settings, buffer, frames[f].fingers, frames[f].time);
+    taps += TapFrameCompletesTap(&tap, settings, buffer, frames[f].fingers, frames[f].time);
   }
   return taps;
 }
@@ -70,23 +69,23 @@ static void tapMode(void)
 static void clickMode(void)
 {
   ClickState click = {0};
-  expect(!ClickRemap(&click, true) && !ClickRemap(&click, false),
+  expect(!ClickBecomesMiddle(&click, true) && !ClickBecomesMiddle(&click, false),
          "a click without the fingers down stays a left click");
 
   click = (ClickState){.fingersDown = true};
-  bool down = ClickRemap(&click, true);
-  bool up = ClickRemap(&click, false);
+  bool down = ClickBecomesMiddle(&click, true);
+  bool up = ClickBecomesMiddle(&click, false);
   expect(down && up, "a click with the fingers down is a middle click, press and release");
 
   click = (ClickState){.fingersDown = true};
-  ClickRemap(&click, true);
+  ClickBecomesMiddle(&click, true);
   click.fingersDown = false;
-  expect(ClickRemap(&click, false), "the release stays middle when the fingers lift first");
+  expect(ClickBecomesMiddle(&click, false), "the release stays middle when the fingers lift first");
 
   click = (ClickState){.fingersDown = true};
-  ClickRemap(&click, true);
-  ClickRemap(&click, false);
-  expect(!ClickRemap(&click, true), "the next click is a left click until the fingers are seen again (3f3aa45)");
+  ClickBecomesMiddle(&click, true);
+  ClickBecomesMiddle(&click, false);
+  expect(!ClickBecomesMiddle(&click, true), "the next click is a left click until the fingers are seen again (3f3aa45)");
 }
 
 int main(void)

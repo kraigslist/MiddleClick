@@ -3,8 +3,6 @@
 #import "PreferenceKeys.h"
 #import <Cocoa/Cocoa.h>
 
-#pragma mark Globals
-
 int previousFingerCount;
 GestureSettings gestureSettings;
 TapState tap;
@@ -15,10 +13,8 @@ CFMutableArrayRef currentDeviceList;
 CFMachPortRef currentEventTap;
 CFRunLoopSourceRef currentRunLoopSource;
 
-#pragma mark Implementation
-
 @implementation Controller {
-  NSTimer* _restartTimer __weak; // Using `weak` so that the pointer is automatically set to `nil` when the referenced object is released ( https://en.wikipedia.org/wiki/Automatic_Reference_Counting#Zeroing_Weak_References ). This helps preventing fatal EXC_BAD_ACCESS.
+  NSTimer* _restartTimer __weak;
   BOOL _isUserSessionActive;
   BOOL _isAccessibilityTrusted;
 }
@@ -35,15 +31,12 @@ CFRunLoopSourceRef currentRunLoopSource;
   NSString* needToClickNullable = [[NSUserDefaults standardUserDefaults] valueForKey:@"needClick"];
   needToClick = needToClickNullable ? [[NSUserDefaults standardUserDefaults] boolForKey:@"needClick"] : [self getIsSystemTapToClickDisabled];
   
-  // register a callback to know when osx come back from sleep
   [[[NSWorkspace sharedWorkspace] notificationCenter]
    addObserver:self
    selector:@selector(receiveWakeNote:)
    name:NSWorkspaceDidWakeNotification
    object:NULL];
   
-  // Multitouch devices registered from more than one logged-in session stop delivering frames,
-  // so listen only while this user's session is on the console.
   [[[NSWorkspace sharedWorkspace] notificationCenter]
    addObserver:self
    selector:@selector(receiveSessionResignActiveNote:)
@@ -55,7 +48,6 @@ CFRunLoopSourceRef currentRunLoopSource;
    name:NSWorkspaceSessionDidBecomeActiveNotification
    object:NULL];
   
-  // Register IOService notifications for added devices.
   IONotificationPortRef port = IONotificationPortCreate(kIOMasterPortDefault);
   CFRunLoopAddSource(CFRunLoopGetMain(),
                      IONotificationPortGetRunLoopSource(port),
@@ -78,18 +70,11 @@ CFRunLoopSourceRef currentRunLoopSource;
     }
   }
   
-  // when displays are reconfigured restart of the app is needed, so add a calback to the
-  // reconifguration of Core Graphics
   CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallBack, self);
 
   [self updateListeners];
 }
 
-/// Installs or removes each listener to match the current state. Every state change ends here.
-/// The touch listeners run only while this user's session is on the console, because multitouch
-/// devices registered from more than one logged-in session stop delivering frames.
-/// The event tap also needs click mode, since tap mode posts its own clicks, and the Accessibility
-/// permission, since a default tap without it can block all mouse input.
 - (void)updateListeners
 {
   BOOL wantsTouch = _isUserSessionActive;
@@ -110,10 +95,8 @@ CFRunLoopSourceRef currentRunLoopSource;
 
 static void registerTouchCallback(void)
 {
-    /// Get list of all multi touch devices
     currentDeviceList = MTDeviceCreateList();
 
-    // Iterate and register callbacks for multitouch devices.
     for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
       registerMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
@@ -125,38 +108,31 @@ static void unregisterTouchCallback(void)
       return;
     }
 
-    // Iterate and unregister callbacks for multitouch devices.
     for (CFIndex i = 0; i < CFArrayGetCount(currentDeviceList); i++)
     {
       unregisterMTDeviceCallback((MTDeviceRef)CFArrayGetValueAtIndex(currentDeviceList, i), touchCallback);
     }
 
-    // The list holds the only reference to each device, so this releases the devices too.
+    // MultitouchSupport gives the list the only reference to each device, so this releases the devices too.
     CFRelease(currentDeviceList);
     currentDeviceList = NULL;
 }
 
 static void registerMouseCallback(void)
 {
-    /// we only want to see left mouse down and left mouse up, because we only want
-    /// to change that one
     CGEventMask eventMask = (CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp));
 
-    /// create eventTap which listens for core grpahic events with the filter
-    /// specified above (so left mouse down and up again)
     CFMachPortRef eventTap = CGEventTapCreate(
                                               kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
                                               eventMask, mouseCallback, NULL);
     currentEventTap = eventTap;
 
     if (eventTap) {
-        // Add to the current run loop.
         CFRunLoopSourceRef runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0);
         currentRunLoopSource = runLoopSource;
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource,
                            kCFRunLoopCommonModes);
 
-        // Enable the event tap.
         CGEventTapEnable(eventTap, true);
     } else {
         NSLog(@"Couldn't create event tap! Check accessibility permissions.");
@@ -171,13 +147,11 @@ static void registerMouseCallback(void)
 
 static void unregisterMouseCallback(void)
 {
-    // Remove from the current run loop.
     if (currentRunLoopSource) {
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), currentRunLoopSource, kCFRunLoopCommonModes);
         CFRelease(currentRunLoopSource);
         currentRunLoopSource = NULL;
     }
-    // Disable and destroy the event tap.
     if (currentEventTap) {
         CGEventTapEnable(currentEventTap, false);
         CFMachPortInvalidate(currentEventTap);
@@ -186,11 +160,10 @@ static void unregisterMouseCallback(void)
     }
 }
 
-/// Schedule listeners to be restarted, if a restart is pending, delay it.
 - (void)scheduleRestart:(NSTimeInterval)delay
 {
-  if (_restartTimer != nil) { // Check whether the timer object was not released.
-    [_restartTimer invalidate]; // Invalidate any existing timer.
+  if (_restartTimer != nil) {
+    [_restartTimer invalidate];
   }
   
   _restartTimer = [NSTimer scheduledTimerWithTimeInterval:delay
@@ -200,8 +173,6 @@ static void unregisterMouseCallback(void)
                                                     }];
 }
 
-/// Callback for system wake up. This restarts the app to initialize callbacks.
-/// Can be tested by entering `pmset sleepnow` in the Terminal
 - (void)receiveWakeNote:(NSNotification*)note
 {
   NSLog(@"System woke up, restarting...");
@@ -240,16 +211,9 @@ static void unregisterMouseCallback(void)
   [self updateListeners];
 }
 
-/// listening to mouse clicks to replace them with middle clicks if there are 3
-/// fingers down at the time of clicking this is done by replacing the left click
-/// down with a other click down and setting the button number to middle click
-/// when 3 fingers are down when clicking, and by replacing left click up with
-/// other click up and setting three button number to middle click when 3 fingers
-/// were down when the last click went down.
 CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
                          CGEventRef event, void* refcon)
 {
-  // macOS disables a tap that responds too slowly, and does not re-enable it on its own.
   if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
     NSLog(@"Event tap was disabled by the system, re-enabling...");
     CGEventTapEnable(currentEventTap, true);
@@ -257,14 +221,13 @@ CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
   }
   
   BOOL isButtonDown = type == kCGEventLeftMouseDown;
-  if (needToClick && ClickRemap(&click, isButtonDown)) {
+  if (needToClick && ClickBecomesMiddle(&click, isButtonDown)) {
     CGEventSetType(event, isButtonDown ? kCGEventOtherMouseDown : kCGEventOtherMouseUp);
     CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber, kCGMouseButtonCenter);
   }
   return event;
 }
 
-/// Read once per gesture rather than per frame, so that `defaults write` still applies without a relaunch.
 static void loadTouchSettings(void)
 {
   @autoreleasepool {
@@ -277,9 +240,6 @@ static void loadTouchSettings(void)
   }
 }
 
-/// Mulittouch callback, see what is touched. If 3 are on the mouse set
-/// threedowns, else unset threedowns.
-/// Runs for every frame while touching, so it must not allocate.
 int touchCallback(int device, Finger* data, int nFingers, double timestamp,
                   int frame)
 {
@@ -290,7 +250,7 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   
   if (needToClick) {
     click.fingersDown = nFingers == gestureSettings.fingers;
-  } else if (TapFrame(&tap, &gestureSettings, data, nFingers, timestamp)) {
+  } else if (TapFrameCompletesTap(&tap, &gestureSettings, data, nFingers, timestamp)) {
     CGEventRef ourEvent = CGEventCreate(NULL);
     CGPoint ourLoc = CGEventGetLocation(ourEvent);
     CFRelease(ourEvent);
@@ -302,7 +262,6 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   return 0;
 }
 
-/// Restart the listeners when devices are connected/invalidated.
 - (void)restartListeners
 {
   NSLog(@"Restarting app functionality...");
@@ -311,7 +270,6 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   [self updateListeners];
 }
 
-/// Callback when a multitouch device is added.
 void multitouchDeviceAddedCallback(void* _controller,
                                    io_iterator_t iterator)
 {
@@ -336,12 +294,12 @@ void displayReconfigurationCallBack(CGDirectDisplayID display, CGDisplayChangeSu
 }
 
 static void registerMTDeviceCallback(MTDeviceRef device, MTContactCallbackFunction callback) {
-    MTRegisterContactFrameCallback(device, callback); // assign callback for device
-    MTDeviceStart(device, 0); // start sending events
+    MTRegisterContactFrameCallback(device, callback);
+    MTDeviceStart(device, 0);
 }
 static void unregisterMTDeviceCallback(MTDeviceRef device, MTContactCallbackFunction callback) {
-    MTUnregisterContactFrameCallback(device, callback); // unassign callback for device
-    MTDeviceStop(device); // stop sending events
+    MTUnregisterContactFrameCallback(device, callback);
+    MTDeviceStop(device);
 }
 
 static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPoint ourLoc) {
@@ -350,7 +308,6 @@ static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPo
     CFRelease(mouseEvent);
 }
 
-/// Returns NO when the setting has never been written.
 - (BOOL)getIsSystemTapToClickDisabled {
   Boolean isDefined = false;
   Boolean isEnabled = CFPreferencesGetAppBooleanValue(CFSTR("Clicking"), CFSTR("com.apple.driver.AppleBluetoothMultitouch.trackpad"), &isDefined);

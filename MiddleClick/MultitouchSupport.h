@@ -17,7 +17,7 @@ typedef struct {
   mtReadout normalized;
   float size;
   int zero1;
-  float angle, majorAxis, minorAxis; // ellipsoid
+  float angle, majorAxis, minorAxis;
   mtReadout mm;
   int zero2[2];
   float unk2;
@@ -29,7 +29,7 @@ MTDeviceRef MTDeviceCreateDefault(void);
 CFMutableArrayRef MTDeviceCreateList(void);
 void MTRegisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
 void MTUnregisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
-void MTDeviceStart(MTDeviceRef, int); // thanks comex
+void MTDeviceStart(MTDeviceRef, int);
 void MTDeviceStop(MTDeviceRef);
 
 #endif

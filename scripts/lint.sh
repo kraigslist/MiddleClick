@@ -1,6 +1,4 @@
 #!/bin/sh
-# Fails on compiler warnings and on static analyzer findings such as leaked CF objects.
-# Usage: scripts/lint.sh [source dir], defaulting to MiddleClick.
 set -eu
 cd "$(dirname "$0")/.."
 SRC=${1:-MiddleClick}
@@ -16,4 +14,10 @@ for file in "$SRC"/*.m "$SRC"/*.c; do
   clang -fsyntax-only $flags "$file" || status=1
   clang --analyze -Xclang -analyzer-werror -Xclang -analyzer-output=text $flags "$file" -o /dev/null || status=1
 done
+
+if awk '/^int touchCallback\(/,/^}/' "$SRC/Controller.m" | grep -qE '\[[A-Za-z_][A-Za-z0-9_]* [A-Za-z_]|@'; then
+  echo "$SRC/Controller.m: error: touchCallback sends an Objective-C message. It runs on every multitouch frame," \
+    "so it must not allocate: move the work into loadTouchSettings, which runs once per gesture, or into Gestures.c."
+  status=1
+fi
 exit $status

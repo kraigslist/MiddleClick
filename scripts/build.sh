@@ -1,6 +1,4 @@
 #!/bin/sh
-# Builds build/MiddleClick.app with only the Command Line Tools, no Xcode needed.
-#
 # The app is ad-hoc signed, so macOS treats every rebuild as a new app:
 # remove MiddleClick from System Settings > Privacy & Security > Accessibility
 # and add the new build again after each rebuild.
