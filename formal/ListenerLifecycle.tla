@@ -75,13 +75,15 @@ ResignActive ==
   /\ debounce' = (Bug = "SharedDebounce")
   /\ UNCHANGED <<click, permitted, believed, leaked, restartArmed, checkArmed>>
 
-(* receiveSessionBecomeActiveNote *)
+(* receiveSessionBecomeActiveNote: restartListeners with the session active *)
 BecomeActive ==
   /\ ~onConsole
   /\ onConsole' = TRUE
   /\ IF Bug = "NoSessionGate" \/ (Bug = "SharedDebounce" /\ debounce)
        THEN UNCHANGED <<session, touch, tap>>
-       ELSE session' = TRUE /\ Update(TRUE, click, believed)
+       ELSE /\ session' = TRUE
+            /\ touch' = TRUE
+            /\ tap' = (WantsTap(TRUE, click, believed) /\ permitted)
   /\ UNCHANGED <<click, permitted, believed, leaked, restartArmed, checkArmed, debounce>>
 
 DebounceEnds ==
