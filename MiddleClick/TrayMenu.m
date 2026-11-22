@@ -7,9 +7,10 @@
 
 - (id)initWithController:(Controller*)ctrl
 {
-  [super init];
-  myController = ctrl;
-  [self setChecks];
+  if ((self = [super init])) {
+    myController = ctrl;
+    [self setChecks];
+  }
   return self;
 }
 
