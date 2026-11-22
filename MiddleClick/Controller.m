@@ -20,6 +20,7 @@ CFRunLoopSourceRef currentRunLoopSource;
 @implementation Controller {
   NSTimer* _restartTimer __weak; // Using `weak` so that the pointer is automatically set to `nil` when the referenced object is released ( https://en.wikipedia.org/wiki/Automatic_Reference_Counting#Zeroing_Weak_References ). This helps preventing fatal EXC_BAD_ACCESS.
   BOOL _isUserSessionActive;
+  BOOL _isAccessibilityTrusted;
 }
 
 - (void)start
@@ -27,13 +28,12 @@ CFRunLoopSourceRef currentRunLoopSource;
   NSLog(@"Starting all listeners...");
 
   _isUserSessionActive = YES;
+  _isAccessibilityTrusted = AXIsProcessTrusted();
   
   loadTouchSettings();
   
   NSString* needToClickNullable = [[NSUserDefaults standardUserDefaults] valueForKey:@"needClick"];
   needToClick = needToClickNullable ? [[NSUserDefaults standardUserDefaults] boolForKey:@"needClick"] : [self getIsSystemTapToClickDisabled];
-  
-  registerTouchCallback();
   
   // register a callback to know when osx come back from sleep
   [[[NSWorkspace sharedWorkspace] notificationCenter]
@@ -82,23 +82,30 @@ CFRunLoopSourceRef currentRunLoopSource;
   // reconifguration of Core Graphics
   CGDisplayRegisterReconfigurationCallback(displayReconfigurationCallBack, self);
 
-  [self updateMouseCallback];
+  [self updateListeners];
 }
 
-static void stopUnstableListeners(void)
+/// Installs or removes each listener to match the current state. Every state change ends here.
+/// The touch listeners run only while this user's session is on the console, because multitouch
+/// devices registered from more than one logged-in session stop delivering frames.
+/// The event tap also needs click mode, since tap mode posts its own clicks, and the Accessibility
+/// permission, since a default tap without it can block all mouse input.
+- (void)updateListeners
 {
-    NSLog(@"Stopping unstable listeners...");
+  BOOL wantsTouch = _isUserSessionActive;
+  BOOL wantsEventTap = wantsTouch && needToClick && _isAccessibilityTrusted;
 
+  if (wantsTouch && !currentDeviceList) {
+    registerTouchCallback();
+  } else if (!wantsTouch && currentDeviceList) {
     unregisterTouchCallback();
+  }
+
+  if (wantsEventTap && !currentEventTap) {
+    registerMouseCallback();
+  } else if (!wantsEventTap && currentEventTap) {
     unregisterMouseCallback();
-}
-
-- (void)startUnstableListeners
-{
-  NSLog(@"Starting unstable listeners...");
-
-  registerTouchCallback();
-  [self updateMouseCallback];
+  }
 }
 
 static void registerTouchCallback(void)
@@ -129,7 +136,7 @@ static void unregisterTouchCallback(void)
     currentDeviceList = NULL;
 }
 
-- (void)registerMouseCallback
+static void registerMouseCallback(void)
 {
     /// we only want to see left mouse down and left mouse up, because we only want
     /// to change that one
@@ -153,31 +160,13 @@ static void unregisterTouchCallback(void)
         CGEventTapEnable(eventTap, true);
     } else {
         NSLog(@"Couldn't create event tap! Check accessibility permissions.");
-        [[NSUserDefaults standardUserDefaults] setBool:1 forKey:@"NSStatusItem Visible Item-0"];
     }
 }
 
-/// A default event tap that loses its permission can block all mouse input, so it must be removed as soon as the permission is revoked.
 - (void)setAccessibilityTrusted:(BOOL)isTrusted
 {
-  if (isTrusted) {
-    [self updateMouseCallback];
-  } else if (currentEventTap) {
-    NSLog(@"Accessibility permission revoked, stopping mouse listener...");
-    unregisterMouseCallback();
-  }
-}
-
-/// Only click mode needs the tap. In tap mode the touch callback posts middle clicks itself,
-/// so the system's clicks don't have to wait on this app.
-- (void)updateMouseCallback
-{
-  BOOL isNeeded = needToClick && _isUserSessionActive;
-  if (isNeeded && !currentEventTap) {
-    [self registerMouseCallback];
-  } else if (!isNeeded && currentEventTap) {
-    unregisterMouseCallback();
-  }
+  _isAccessibilityTrusted = isTrusted;
+  [self updateListeners];
 }
 
 static void unregisterMouseCallback(void)
@@ -200,11 +189,6 @@ static void unregisterMouseCallback(void)
 /// Schedule listeners to be restarted, if a restart is pending, delay it.
 - (void)scheduleRestart:(NSTimeInterval)delay
 {
-  if (!_isUserSessionActive) {
-    NSLog(@"User session is inactive, skipping restart");
-    return;
-  }
-  
   if (_restartTimer != nil) { // Check whether the timer object was not released.
     [_restartTimer invalidate]; // Invalidate any existing timer.
   }
@@ -228,8 +212,7 @@ static void unregisterMouseCallback(void)
 {
   NSLog(@"User session resigned active, stopping listeners...");
   _isUserSessionActive = NO;
-  [_restartTimer invalidate];
-  stopUnstableListeners();
+  [self updateListeners];
 }
 
 - (void)receiveSessionBecomeActiveNote:(NSNotification*)note
@@ -248,13 +231,13 @@ static void unregisterMouseCallback(void)
 {
   [[NSUserDefaults standardUserDefaults] setBool:click forKey:@"needClick"];
   needToClick = click;
-  [self updateMouseCallback];
+  [self updateListeners];
 }
 - (void)resetClickMode
 {
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"needClick"];
   needToClick = [self getIsSystemTapToClickDisabled];
-  [self updateMouseCallback];
+  [self updateListeners];
 }
 
 /// listening to mouse clicks to replace them with middle clicks if there are 3
@@ -323,8 +306,9 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
 - (void)restartListeners
 {
   NSLog(@"Restarting app functionality...");
-  stopUnstableListeners();
-  [self startUnstableListeners];
+  unregisterTouchCallback();
+  unregisterMouseCallback();
+  [self updateListeners];
 }
 
 /// Callback when a multitouch device is added.
