@@ -72,6 +72,7 @@ Each action is one callout on the main run loop. Every handler above runs there,
 
 - Covered are the events in the table and every order of them. The state space is small, about 44 distinct states for `none`, so the check is exhaustive and has no depth bound. `leaked` is capped at 2 only to keep the replays finite.
 - `AXIsProcessTrusted()` is assumed to report the new permission by the time `TrayMenu`'s check runs, 0.5 s after the notification. If it lags longer, a revoked tap survives until the next notification. The model doesn't cover that.
+- `NoLeaks` counts a leak only where the model registers or restarts. That a register or unregister function releases what it should is not modeled. `scripts/lint.sh` checks local objects with the clang analyzer, but nothing checks the globals `currentDeviceList`, `currentEventTap` and `currentRunLoopSource`. A change to those functions needs review by hand.
 - Not covered are the gap between a session switch and its notification, the tap re-enable in `mouseCallback`, the multitouch frame thread (`touchCallback` runs off the main run loop), and anything inside `Gestures.c`. `scripts/test.sh` covers `Gestures.c`.
 
 ## When the code changes

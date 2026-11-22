@@ -57,6 +57,7 @@ expect_test_failure MiddleClick/Gestures.c 's/bool isTap = false;/bool isTap = [
 
 expect_lint_error d9a61d0^ "Potential leak of an object stored into 'ourEvent'" "leaked CGEvents in touchCallback (fixed in d9a61d0)"
 expect_lint_error d0bce95^ "Potential leak of an object stored into 'task'" "leaked NSTask in runCommand (fixed in d0bce95)"
+expect_lint_error 854f3e2^ "touchCallback sends an Objective-C message" "per-frame NSUserDefaults and NSDate allocation in touchCallback (fixed in 854f3e2)"
 expect_lint_error 8e98c80^ "[-Werror,-Wstrict-prototypes]" "C functions declared without prototypes (fixed in 8e98c80)"
 
 exit $failures
