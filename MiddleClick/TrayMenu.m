@@ -7,9 +7,10 @@
 
 - (id)initWithController:(Controller*)ctrl
 {
-  [super init];
-  myController = ctrl;
-  [self setChecks];
+  if ((self = [super init])) {
+    myController = ctrl;
+    [self setChecks];
+  }
   return self;
 }
 
@@ -31,6 +32,9 @@
                  hasAccessibilityPermission:(BOOL)isTrusted
 {
   _statusItem.button.appearsDisabled = !isTrusted;
+  if (!isTrusted) {
+    _statusItem.visible = YES;
+  }
   accessibilityPermissionStatusItem.hidden = isTrusted;
   accessibilityPermissionActionItem.hidden = isTrusted;
 }
@@ -96,7 +100,6 @@
   
   [self createMenuAccessibilityPermissionItems:menu];
   
-  // Add About
   menuItem = [menu addItemWithTitle:[NSString stringWithFormat:@"About %@...", getAppName()]
                              action:@selector(openWebsite:)
                       keyEquivalent:@""];
@@ -123,10 +126,8 @@
   
   [self setChecks];
   
-  // Add Separator
   [menu addItem:[NSMenuItem separatorItem]];
   
-  // Add Quit Action
   menuItem = [menu addItemWithTitle:@"Quit"
                              action:@selector(actionQuit:)
                       keyEquivalent:@"q"];
@@ -149,15 +150,7 @@
   
   NSImage* icon = [NSImage imageNamed:(@"StatusIcon")];
   [icon setSize:CGSizeMake(24, 24)];
-  
-  // Check if Darkmode menubar is supported and enable templating of the icon in
-  // that case.
-  
-  BOOL oldBusted = (floor(NSAppKitVersionNumber) <= NSAppKitVersionNumber10_9);
-  if (!oldBusted) {
-    // 10.10 or higher, so setTemplate: is safe
-    [icon setTemplate:YES];
-  }
+  [icon setTemplate:YES];
   
   _statusItem = [[[NSStatusBar systemStatusBar]
                   statusItemWithLength:24] retain];

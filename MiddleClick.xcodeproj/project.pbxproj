@@ -15,6 +15,7 @@
 		8D11072D0486CEB800E47090 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 29B97316FDCFA39411CA2CEA /* main.m */; settings = {ATTRIBUTES = (); }; };
 		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
 		FAD94F9410A88A7800A520EC /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = FAD94F9310A88A7800A520EC /* Controller.m */; };
+		4D1C0A022B00000000000001 /* Gestures.c in Sources */ = {isa = PBXBuildFile; fileRef = 4D1C0A012B00000000000001 /* Gestures.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,9 @@
 		9753175829D5983E0065CAA7 /* PreferenceKeys.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PreferenceKeys.h; path = MiddleClick/PreferenceKeys.h; sourceTree = "<group>"; };
 		FAD94F9210A88A7800A520EC /* Controller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Controller.h; path = MiddleClick/Controller.h; sourceTree = "<group>"; };
 		FAD94F9310A88A7800A520EC /* Controller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Controller.m; path = MiddleClick/Controller.m; sourceTree = "<group>"; };
+		4D1C0A002B00000000000001 /* Gestures.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Gestures.h; path = MiddleClick/Gestures.h; sourceTree = "<group>"; };
+		4D1C0A012B00000000000001 /* Gestures.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = Gestures.c; path = MiddleClick/Gestures.c; sourceTree = "<group>"; };
+		4D1C0A032B00000000000001 /* MultitouchSupport.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MultitouchSupport.h; path = MiddleClick/MultitouchSupport.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,7 +109,10 @@
 			children = (
 				FAD94F9210A88A7800A520EC /* Controller.h */,
 				FAD94F9310A88A7800A520EC /* Controller.m */,
+				4D1C0A002B00000000000001 /* Gestures.h */,
+				4D1C0A012B00000000000001 /* Gestures.c */,
 				29B97316FDCFA39411CA2CEA /* main.m */,
+				4D1C0A032B00000000000001 /* MultitouchSupport.h */,
 				9753175829D5983E0065CAA7 /* PreferenceKeys.h */,
 			);
 			name = "Other Sources";
@@ -203,6 +210,7 @@
 				8D11072D0486CEB800E47090 /* main.m in Sources */,
 				75A6B6600FEE3BE90071FAC0 /* TrayMenu.m in Sources */,
 				FAD94F9410A88A7800A520EC /* Controller.m in Sources */,
+				4D1C0A022B00000000000001 /* Gestures.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,7 +228,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21112026;
+				CURRENT_PROJECT_VERSION = 22112026;
 				DEVELOPMENT_TEAM = R2294BC6J8;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -233,7 +241,7 @@
 				INFOPLIST_FILE = "$(SRCROOT)/MiddleClick/Info.plist";
 				INSTALL_PATH = "$(HOME)/Applications";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
-				MARKETING_VERSION = 2.7.1;
+				MARKETING_VERSION = 2.7.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rouge41.middleClick;
 				PRODUCT_NAME = MiddleClick;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -251,7 +259,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 21112026;
+				CURRENT_PROJECT_VERSION = 22112026;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEPLOYMENT_POSTPROCESSING = YES;
@@ -267,7 +275,7 @@
 				INSTALL_PATH = "$(HOME)/Applications";
 				LLVM_LTO = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
-				MARKETING_VERSION = 2.7.1;
+				MARKETING_VERSION = 2.7.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rouge41.middleClick;
 				PRODUCT_NAME = MiddleClick;
 				PROVISIONING_PROFILE_SPECIFIER = "";

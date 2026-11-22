@@ -1,6 +1,4 @@
 #!/bin/sh
-# Builds build/MiddleClick.app with only the Command Line Tools, no Xcode needed.
-#
 # The app is ad-hoc signed, so macOS treats every rebuild as a new app:
 # remove MiddleClick from System Settings > Privacy & Security > Accessibility
 # and add the new build again after each rebuild.
@@ -23,10 +21,13 @@ MIN_MACOS=$(setting MACOSX_DEPLOYMENT_TARGET)
 rm -rf "$APP" "$ICONSET"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ICONSET"
 
+echo "Linting..."
+scripts/lint.sh "$SRC"
+
 echo "Compiling MiddleClick $VERSION..."
 clang -Os -flto -fno-objc-arc -fobjc-weak \
   -arch arm64 -arch x86_64 -mmacosx-version-min="$MIN_MACOS" \
-  "$SRC"/*.m -o "$APP/Contents/MacOS/MiddleClick" \
+  "$SRC"/*.m "$SRC"/*.c -o "$APP/Contents/MacOS/MiddleClick" \
   -framework Cocoa -framework ApplicationServices -framework IOKit \
   -F/System/Library/PrivateFrameworks -framework MultitouchSupport \
   -Wl,-dead_strip
