@@ -210,7 +210,6 @@
 				8D11072D0486CEB800E47090 /* main.m in Sources */,
 				75A6B6600FEE3BE90071FAC0 /* TrayMenu.m in Sources */,
 				FAD94F9410A88A7800A520EC /* Controller.m in Sources */,
-				4D1C0A022B00000000000001 /* Gestures.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
