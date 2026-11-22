@@ -23,6 +23,9 @@ MIN_MACOS=$(setting MACOSX_DEPLOYMENT_TARGET)
 rm -rf "$APP" "$ICONSET"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ICONSET"
 
+echo "Linting..."
+scripts/lint.sh "$SRC"
+
 echo "Compiling MiddleClick $VERSION..."
 clang -Os -flto -fno-objc-arc -fobjc-weak \
   -arch arm64 -arch x86_64 -mmacosx-version-min="$MIN_MACOS" \
