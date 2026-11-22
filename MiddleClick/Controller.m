@@ -217,9 +217,9 @@ static void unregisterMouseCallback(void)
 
 - (void)receiveSessionBecomeActiveNote:(NSNotification*)note
 {
-  NSLog(@"User session became active, starting listeners...");
+  NSLog(@"User session became active, restarting...");
   _isUserSessionActive = YES;
-  [self updateListeners];
+  [self restartListeners];
 }
 
 - (BOOL)getClickMode
