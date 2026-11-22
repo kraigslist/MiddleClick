@@ -1,58 +1,16 @@
 #import "Controller.h"
+#import "Gestures.h"
 #import "PreferenceKeys.h"
-#include "TrayMenu.h"
 #import <Cocoa/Cocoa.h>
-#include <CoreFoundation/CoreFoundation.h>
-#import <Foundation/Foundation.h>
-#include <math.h>
-#include <unistd.h>
-
-#pragma mark Multitouch API
-
-typedef struct {
-  float x, y;
-} mtPoint;
-typedef struct {
-  mtPoint pos, vel;
-} mtReadout;
-
-typedef struct {
-  int frame;
-  double timestamp;
-  int identifier, state, foo3, foo4;
-  mtReadout normalized;
-  float size;
-  int zero1;
-  float angle, majorAxis, minorAxis; // ellipsoid
-  mtReadout mm;
-  int zero2[2];
-  float unk2;
-} Finger;
-
-typedef void* MTDeviceRef;
-typedef int (*MTContactCallbackFunction)(int, Finger*, int, double, int);
-MTDeviceRef MTDeviceCreateDefault(void);
-CFMutableArrayRef MTDeviceCreateList(void);
-void MTRegisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
-void MTUnregisterContactFrameCallback(MTDeviceRef, MTContactCallbackFunction);
-void MTDeviceStart(MTDeviceRef, int); // thanks comex
-void MTDeviceStop(MTDeviceRef);
 
 #pragma mark Globals
 
-BOOL isTouching;
-double touchStartTime;
 int previousFingerCount;
-float middleclickX, middleclickY;
-float middleclickX2, middleclickY2;
+GestureSettings gestureSettings;
+TapState tap;
+ClickState click;
 
 BOOL needToClick;
-long fingersQua;
-float maxDistanceDelta;
-double maxTimeDelta;
-BOOL threeDown;
-BOOL maybeMiddleClick;
-BOOL wasThreeDown;
 CFMutableArrayRef currentDeviceList;
 CFMachPortRef currentEventTap;
 CFRunLoopSourceRef currentRunLoopSource;
@@ -68,8 +26,6 @@ CFRunLoopSourceRef currentRunLoopSource;
 {
   NSLog(@"Starting all listeners...");
 
-  threeDown = NO;
-  wasThreeDown = NO;
   _isUserSessionActive = YES;
   
   loadTouchSettings();
@@ -317,21 +273,10 @@ CGEventRef mouseCallback(CGEventTapProxy proxy, CGEventType type,
     return event;
   }
   
-  if (needToClick) {
-    if (threeDown && type == kCGEventLeftMouseDown) {
-      wasThreeDown = YES;
-      CGEventSetType(event, kCGEventOtherMouseDown);
-      CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber,
-                                  kCGMouseButtonCenter);
-      threeDown = NO;
-    }
-    
-    if (wasThreeDown && type == kCGEventLeftMouseUp) {
-      wasThreeDown = NO;
-      CGEventSetType(event, kCGEventOtherMouseUp);
-      CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber,
-                                  kCGMouseButtonCenter);
-    }
+  BOOL isButtonDown = type == kCGEventLeftMouseDown;
+  if (needToClick && ClickRemap(&click, isButtonDown)) {
+    CGEventSetType(event, isButtonDown ? kCGEventOtherMouseDown : kCGEventOtherMouseUp);
+    CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber, kCGMouseButtonCenter);
   }
   return event;
 }
@@ -341,9 +286,11 @@ static void loadTouchSettings(void)
 {
   @autoreleasepool {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-    fingersQua = [defaults integerForKey:kFingersNum];
-    maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta];
-    maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0;
+    gestureSettings = (GestureSettings){
+      .fingers = (int)[defaults integerForKey:kFingersNum],
+      .maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta],
+      .maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0,
+    };
   }
 }
 
@@ -359,70 +306,14 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   previousFingerCount = nFingers;
   
   if (needToClick) {
-    threeDown = nFingers == fingersQua;
-  } else {
-    if (nFingers == 0) {
-      double elapsedTime = isTouching ? timestamp - touchStartTime : 0;
-      isTouching = NO;
-      if (middleclickX + middleclickY && elapsedTime <= maxTimeDelta) {
-        float delta = ABS(middleclickX - middleclickX2) + ABS(middleclickY - middleclickY2);
-        if (delta < maxDistanceDelta) {
-          // Emulate a middle click
-          
-          // get the current pointer location
-          CGEventRef ourEvent = CGEventCreate(NULL);
-          CGPoint ourLoc = CGEventGetLocation(ourEvent);
-          CFRelease(ourEvent);
-          
-          CGMouseButton buttonType = kCGMouseButtonCenter;
-          
-          postMouseEvent(kCGEventOtherMouseDown, buttonType, ourLoc);
-          postMouseEvent(kCGEventOtherMouseUp, buttonType, ourLoc);
-        }
-      }
-    } else if (nFingers > 0 && !isTouching) {
-      isTouching = YES;
-      touchStartTime = timestamp;
-      
-      maybeMiddleClick = YES;
-      middleclickX = 0.0f;
-      middleclickY = 0.0f;
-    } else {
-      if (maybeMiddleClick == YES) {
-        double elapsedTime = timestamp - touchStartTime;
-        if (elapsedTime > maxTimeDelta)
-          maybeMiddleClick = NO;
-      }
-    }
+    click.fingersDown = nFingers == gestureSettings.fingers;
+  } else if (TapFrame(&tap, &gestureSettings, data, nFingers, timestamp)) {
+    CGEventRef ourEvent = CGEventCreate(NULL);
+    CGPoint ourLoc = CGEventGetLocation(ourEvent);
+    CFRelease(ourEvent);
     
-    if (nFingers > fingersQua) {
-      maybeMiddleClick = NO;
-      middleclickX = 0.0f;
-      middleclickY = 0.0f;
-    }
-    
-    if (nFingers == fingersQua) {
-      if (maybeMiddleClick == YES) {
-        for (int i = 0; i < fingersQua; i++)
-        {
-          mtPoint pos = ((Finger *)&data[i])->normalized.pos;
-          middleclickX += pos.x;
-          middleclickY += pos.y;
-        }
-        middleclickX2 = middleclickX;
-        middleclickY2 = middleclickY;
-        maybeMiddleClick = NO;
-      } else {
-        middleclickX2 = 0.0f;
-        middleclickY2 = 0.0f;
-        for (int i = 0; i < fingersQua; i++)
-        {
-          mtPoint pos = ((Finger *)&data[i])->normalized.pos;
-          middleclickX2 += pos.x;
-          middleclickY2 += pos.y;
-        }
-      }
-    }
+    postMouseEvent(kCGEventOtherMouseDown, kCGMouseButtonCenter, ourLoc);
+    postMouseEvent(kCGEventOtherMouseUp, kCGMouseButtonCenter, ourLoc);
   }
   
   return 0;

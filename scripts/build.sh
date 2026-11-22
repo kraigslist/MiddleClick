@@ -29,7 +29,7 @@ scripts/lint.sh "$SRC"
 echo "Compiling MiddleClick $VERSION..."
 clang -Os -flto -fno-objc-arc -fobjc-weak \
   -arch arm64 -arch x86_64 -mmacosx-version-min="$MIN_MACOS" \
-  "$SRC"/*.m -o "$APP/Contents/MacOS/MiddleClick" \
+  "$SRC"/*.m "$SRC"/*.c -o "$APP/Contents/MacOS/MiddleClick" \
   -framework Cocoa -framework ApplicationServices -framework IOKit \
   -F/System/Library/PrivateFrameworks -framework MultitouchSupport \
   -Wl,-dead_strip
