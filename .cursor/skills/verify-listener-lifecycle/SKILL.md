@@ -48,7 +48,8 @@ A real bug is a trace in which every step is something the code can do. A modeli
 | `WantsTap`, `Update` | `-[Controller updateListeners]` |
 | `ScheduleRestart` | `receiveWakeNote:`, `multitouchDeviceAddedCallback`, `displayReconfigurationCallBack` |
 | `RestartFires` | `-[Controller restartListeners]` |
-| `ResignActive`, `BecomeActive` | `receiveSessionResignActiveNote:`, `receiveSessionBecomeActiveNote:` |
+| `ResignActive` | `receiveSessionResignActiveNote:` |
+| `BecomeActive` | `receiveSessionBecomeActiveNote:`, which calls `restartListeners` |
 | `SetMode` | `setMode:`, `resetClickMode` |
 | `Revoke`, `Grant` | The user changes the permission, and `-[TrayMenu receiveAccessibilityNote:]` schedules a check |
 | `CheckFires` | `-[TrayMenu initAccessibilityPermissionStatus:]` calling `setAccessibilityTrusted:` |
@@ -80,4 +81,4 @@ Each action is one callout on the main run loop. Every handler above runs there,
 3. When you fix a lifecycle bug, add it as a `Bug` value, with the invariant it must break, to both the model and `scripts/model-check.sh`.
 4. After confirming that the model describes the code at a newer commit, move the sync commit below forward. Moving it without that check makes the record a lie.
 
-Last synced with the code at commit `c09b663` (`Derive installed listeners from one state in updateListeners`).
+Last synced with the code at commit `ca99dc4` (`Restart listeners on become-active, as before`).
