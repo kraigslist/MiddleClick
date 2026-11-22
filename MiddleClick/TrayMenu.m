@@ -32,6 +32,9 @@
                  hasAccessibilityPermission:(BOOL)isTrusted
 {
   _statusItem.button.appearsDisabled = !isTrusted;
+  if (!isTrusted) {
+    _statusItem.visible = YES;
+  }
   accessibilityPermissionStatusItem.hidden = isTrusted;
   accessibilityPermissionActionItem.hidden = isTrusted;
 }
