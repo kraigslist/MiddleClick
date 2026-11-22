@@ -1,5 +1,4 @@
 #!/bin/sh
-# Usage: scripts/test.sh [repo root], defaulting to this checkout.
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=${1:-.}

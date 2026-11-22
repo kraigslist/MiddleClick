@@ -1,7 +1,7 @@
 #include "Gestures.h"
 #include <math.h>
 
-bool TapFrame(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp)
+bool TapFrameCompletesTap(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp)
 {
   bool isTap = false;
 
@@ -46,7 +46,7 @@ bool TapFrame(TapState* tap, const GestureSettings* settings, const Finger* fing
   return isTap;
 }
 
-bool ClickRemap(ClickState* click, bool isButtonDown)
+bool ClickBecomesMiddle(ClickState* click, bool isButtonDown)
 {
   if (isButtonDown && click->fingersDown) {
     click->fingersDown = false;

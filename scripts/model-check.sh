@@ -1,7 +1,4 @@
 #!/bin/sh
-# Model-checks formal/ListenerLifecycle.tla: the current design must pass every invariant,
-# and each replayed past bug must break the invariant that guards it.
-# Usage: scripts/model-check.sh [Bug], where Bug is one of the replays below. Defaults to all.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -18,40 +15,40 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 failures=0
 
-# check <Bug> <invariant that must fail, or "none">
 check() {
-  dir="$TMP/$1"
+  bug=$1 broken_invariant=$2 fixed=$3
+  dir="$TMP/$bug"
   mkdir -p "$dir"
   cp formal/ListenerLifecycle.tla "$dir"
   cat >"$dir/ListenerLifecycle.cfg" <<EOF
 SPECIFICATION Spec
-CONSTANT Bug = "$1"
+CONSTANT Bug = "$bug"
 CONSTRAINT Bounded
 INVARIANTS NoLeaks NothingOffConsole NoTapOnceRevokeKnown MissingPermissionIsChecked Converged
 EOF
   (cd "$dir" && java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers 1 -deadlock \
     -metadir "$dir/states" ListenerLifecycle >"$dir/tlc.log" 2>&1) || true
-  if [ "$2" = none ]; then
+  if [ "$broken_invariant" = none ]; then
     if grep -q 'Model checking completed. No error has been found.' "$dir/tlc.log"; then
-      echo "passes  $1"
+      echo "passes  $bug"
     else
-      echo "FAILS   $1"; cat "$dir/tlc.log"; failures=$((failures + 1))
+      echo "FAILS   $bug"; cat "$dir/tlc.log"; failures=$((failures + 1))
     fi
-  elif grep -q "Invariant $2 is violated" "$dir/tlc.log"; then
-    echo "caught  $1  breaks $2"
+  elif grep -q "Invariant $broken_invariant is violated" "$dir/tlc.log"; then
+    echo "caught  $bug  breaks $broken_invariant  $fixed"
   else
-    echo "MISSED  $1  should break $2"; cat "$dir/tlc.log"; failures=$((failures + 1))
+    echo "MISSED  $bug  should break $broken_invariant  $fixed"; cat "$dir/tlc.log"; failures=$((failures + 1))
   fi
 }
 
-run() { [ -z "${ONLY:-}" ] || [ "$ONLY" = "$1" ] && check "$1" "$2" || true; }
+run() { [ -z "${ONLY:-}" ] || [ "$ONLY" = "$1" ] && check "$@" || true; }
 ONLY=${1:-}
 
-run none none
-run RestartLeak NoLeaks                         # 7249613: restarts leaked the tap, its source and the device list
-run NoSessionGate NothingOffConsole             # 864fc4f: listeners stayed on while switched out
-run SharedDebounce Converged                    # upstream #172: a quick switch back dropped become-active
-run NoRevokeHandling MissingPermissionIsChecked # 08b1415: a revoked permission went unnoticed
-run TapInTapMode Converged                      # dd4aa91: the tap was installed in tap mode
+run none none "the current design"
+run RestartLeak NoLeaks "restarts leaked the tap, its source and the device list (fixed in 7249613)"
+run NoSessionGate NothingOffConsole "listeners stayed on while switched out (fixed in 864fc4f)"
+run SharedDebounce Converged "a quick switch back dropped become-active (fixed in upstream #172)"
+run NoRevokeHandling MissingPermissionIsChecked "a revoked permission went unnoticed (fixed in 08b1415)"
+run TapInTapMode Converged "the tap was installed in tap mode (fixed in dd4aa91)"
 
 exit $failures

@@ -1,6 +1,4 @@
 #!/bin/sh
-# Fails on compiler warnings and on static analyzer findings such as leaked CF objects.
-# Usage: scripts/lint.sh [source dir], defaulting to MiddleClick.
 set -eu
 cd "$(dirname "$0")/.."
 SRC=${1:-MiddleClick}
