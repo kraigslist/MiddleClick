@@ -106,6 +106,17 @@ defaults write com.rouge41.middleClick fingers 4
 
 > Default is 3
 
+### Full Screen Tap
+
+- Tap with 4 fingers to make the focused window go full screen, or leave full screen. Works with "Tap to click" on or off.
+- Turn it off from the status bar menu. To use a different number of fingers:
+
+```ps1
+defaults write com.rouge41.middleClick fullscreenFingers 5
+```
+
+> Default is 4. It is disabled when it equals `fingers`
+
 ### Tapping preferences
 
 #### Max Distance Delta
