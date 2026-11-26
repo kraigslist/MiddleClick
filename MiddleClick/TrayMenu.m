@@ -75,10 +75,27 @@
   [self setChecks];
 }
 
+- (void)toggleFillTap:(id)sender
+{
+  [[NSUserDefaults standardUserDefaults] setBool:[sender state] != NSControlStateValueOn forKey:kFillTap];
+  [self setChecks];
+}
+
 - (void)toggleFullscreenTap:(id)sender
 {
   [[NSUserDefaults standardUserDefaults] setBool:[sender state] != NSControlStateValueOn forKey:kFullscreenTap];
   [self setChecks];
+}
+
+- (void)setTapItem:(NSMenuItem*)item
+             title:(NSString*)format
+           fingers:(int)fingers
+           enabled:(BOOL)isEnabled
+           clashes:(BOOL)clashes
+{
+  [item setTitle:[NSString stringWithFormat:format, fingers]];
+  [item setState:isEnabled ? NSControlStateValueOn : NSControlStateValueOff];
+  item.hidden = fingers <= 0 || clashes;
 }
 
 - (void)setChecks
@@ -88,14 +105,25 @@
   
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   int fingersQua = (int)[defaults integerForKey:kFingersNum];
+  int fillFingers = (int)[defaults integerForKey:kFillFingers];
   int fullscreenFingers = (int)[defaults integerForKey:kFullscreenFingers];
+  BOOL isFillEnabled = [defaults boolForKey:kFillTap];
+  BOOL fillClashes = fillFingers == fingersQua;
   
   [infoItem setTitle:[clickModeInfo stringByAppendingFormat: @" with %d Fingers", fingersQua]];
   [tapToClickItem setState:clickMode ? NSControlStateValueOff : NSControlStateValueOn];
   
-  [fullscreenTapItem setTitle:[NSString stringWithFormat:@"Tap %d Fingers for Full Screen", fullscreenFingers]];
-  [fullscreenTapItem setState:[defaults boolForKey:kFullscreenTap] ? NSControlStateValueOn : NSControlStateValueOff];
-  fullscreenTapItem.hidden = fullscreenFingers <= 0 || fullscreenFingers == fingersQua;
+  [self setTapItem:fillTapItem
+             title:@"Tap %d Fingers to Fill"
+           fingers:fillFingers
+           enabled:isFillEnabled
+           clashes:fillClashes];
+  [self setTapItem:fullscreenTapItem
+             title:@"Tap %d Fingers for Full Screen"
+           fingers:fullscreenFingers
+           enabled:[defaults boolForKey:kFullscreenTap]
+           clashes:fullscreenFingers == fingersQua ||
+                   (isFillEnabled && !fillClashes && fullscreenFingers == fillFingers)];
 }
 
 - (void)actionQuit:(id)sender
@@ -135,6 +163,11 @@
   resetItem.alternate = YES;
   resetItem.keyEquivalentModifierMask = NSEventModifierFlagOption;
   [resetItem setTarget:self];
+  
+  fillTapItem = [menu addItemWithTitle:@""
+                                action:@selector(toggleFillTap:)
+                         keyEquivalent:@""];
+  [fillTapItem setTarget:self];
   
   fullscreenTapItem = [menu addItemWithTitle:@""
                                       action:@selector(toggleFullscreenTap:)

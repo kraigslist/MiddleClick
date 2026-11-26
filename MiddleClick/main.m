@@ -6,6 +6,8 @@ int main(int argc, char* argv[])
 {
   id keys[] = {
     kFingersNum,
+    kFillFingers,
+    kFillTap,
     kFullscreenFingers,
     kFullscreenTap,
     kMaxDistanceDelta,
@@ -13,6 +15,8 @@ int main(int argc, char* argv[])
   };
   id objects[] = {
     [NSNumber numberWithInt:kFingersNumDefault],
+    [NSNumber numberWithInt:kFillFingersDefault],
+    [NSNumber numberWithBool:kFillTapDefault],
     [NSNumber numberWithInt:kFullscreenFingersDefault],
     [NSNumber numberWithBool:kFullscreenTapDefault],
     [NSNumber numberWithFloat:kMaxDistanceDeltaDefault],

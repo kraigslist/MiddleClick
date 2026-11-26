@@ -1,8 +1,15 @@
 #import "Controller.h"
 #import "Gestures.h"
 #import "PreferenceKeys.h"
+#import "WindowFrame.h"
 #import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
+
+enum {
+  kMaxScreens = 16,
+  kMaxSavedWindowFrames = 64,
+};
+static const double kFilledTolerance = 24;
 
 int previousFingerCount;
 GestureSettings gestureSettings;
@@ -13,6 +20,7 @@ BOOL needToClick;
 CFMutableArrayRef currentDeviceList;
 CFMachPortRef currentEventTap;
 CFRunLoopSourceRef currentRunLoopSource;
+CFMutableDictionaryRef savedWindowFrames;
 
 @implementation Controller {
   NSTimer* _restartTimer __weak;
@@ -234,10 +242,18 @@ static void loadTouchSettings(void)
   @autoreleasepool {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
     int fingers = (int)[defaults integerForKey:kFingersNum];
+    int fillFingers = [defaults boolForKey:kFillTap] ? (int)[defaults integerForKey:kFillFingers] : 0;
+    if (fillFingers == fingers) {
+      fillFingers = 0;
+    }
     int fullscreenFingers = [defaults boolForKey:kFullscreenTap] ? (int)[defaults integerForKey:kFullscreenFingers] : 0;
+    if (fullscreenFingers == fingers || fullscreenFingers == fillFingers) {
+      fullscreenFingers = 0;
+    }
     gestureSettings = (GestureSettings){
       .fingers = fingers,
-      .fullscreenFingers = fullscreenFingers == fingers ? 0 : fullscreenFingers,
+      .fillFingers = fillFingers,
+      .fullscreenFingers = fullscreenFingers,
       .maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta],
       .maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0,
     };
@@ -260,7 +276,9 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   if (tapFingers == 0) {
     return 0;
   }
-  if (tapFingers == gestureSettings.fullscreenFingers) {
+  if (tapFingers == gestureSettings.fillFingers) {
+    dispatch_async_f(dispatch_get_main_queue(), NULL, toggleFocusedWindowFill);
+  } else if (tapFingers == gestureSettings.fullscreenFingers) {
     dispatch_async_f(dispatch_get_main_queue(), NULL, toggleFocusedWindowFullscreen);
   } else if (!needToClick) {
     CGEventRef ourEvent = CGEventCreate(NULL);
@@ -329,9 +347,9 @@ static void postFullscreenShortcut(void) {
     }
 }
 
-static void toggleFocusedWindowFullscreen(void* unused) {
+static CFTypeRef copyFocusedWindow(void) {
     if (!AXIsProcessTrusted()) {
-        return;
+        return NULL;
     }
 
     pid_t pid;
@@ -342,7 +360,121 @@ static void toggleFocusedWindowFullscreen(void* unused) {
     CFTypeRef window = NULL;
     AXError error = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &window);
     CFRelease(app);
-    if (error != kAXErrorSuccess || !window) {
+    if (error != kAXErrorSuccess) {
+        if (window) {
+            CFRelease(window);
+        }
+        return NULL;
+    }
+    return window;
+}
+
+static bool windowIsFullscreen(CFTypeRef window) {
+    CFTypeRef isFullscreen = NULL;
+    if (AXUIElementCopyAttributeValue(window, CFSTR("AXFullScreen"), &isFullscreen) != kAXErrorSuccess || !isFullscreen) {
+        return false;
+    }
+    bool result = CFGetTypeID(isFullscreen) == CFBooleanGetTypeID() && CFBooleanGetValue(isFullscreen);
+    CFRelease(isFullscreen);
+    return result;
+}
+
+static bool copyAXValue(CFTypeRef window, CFStringRef attribute, AXValueType type, void* value) {
+    CFTypeRef axValue = NULL;
+    if (AXUIElementCopyAttributeValue(window, attribute, &axValue) != kAXErrorSuccess || !axValue) {
+        return false;
+    }
+    bool result = CFGetTypeID(axValue) == AXValueGetTypeID() && AXValueGetValue(axValue, type, value);
+    CFRelease(axValue);
+    return result;
+}
+
+static bool copyWindowFrame(CFTypeRef window, WindowRect* frame) {
+    CGPoint position;
+    CGSize size;
+    if (!copyAXValue(window, kAXPositionAttribute, kAXValueTypeCGPoint, &position) ||
+        !copyAXValue(window, kAXSizeAttribute, kAXValueTypeCGSize, &size)) {
+        return false;
+    }
+    *frame = (WindowRect){position.x, position.y, size.width, size.height};
+    return true;
+}
+
+static void setWindowFrame(CFTypeRef window, WindowRect frame) {
+    CGPoint origin = {frame.x, frame.y};
+    CGSize size = {frame.width, frame.height};
+    AXValueRef position = AXValueCreate(kAXValueTypeCGPoint, &origin);
+    AXValueRef dimensions = AXValueCreate(kAXValueTypeCGSize, &size);
+    // Apps clamp a new size to the screen space left from the current position, so move, resize, then move again.
+    AXUIElementSetAttributeValue(window, kAXPositionAttribute, position);
+    AXUIElementSetAttributeValue(window, kAXSizeAttribute, dimensions);
+    AXUIElementSetAttributeValue(window, kAXPositionAttribute, position);
+    CFRelease(position);
+    CFRelease(dimensions);
+}
+
+static WindowRect windowRectFromCocoa(NSRect rect, double primaryScreenHeight) {
+    WindowRect frame = {rect.origin.x, rect.origin.y, rect.size.width, rect.size.height};
+    return WindowFrameFlipped(frame, primaryScreenHeight);
+}
+
+static bool usableFrameForWindow(WindowRect window, WindowRect* usable) {
+    @autoreleasepool {
+        NSArray* screens = [NSScreen screens];
+        int count = (int)MIN([screens count], kMaxScreens);
+        if (count == 0) {
+            return false;
+        }
+        double primaryScreenHeight = NSHeight([[screens objectAtIndex:0] frame]);
+        WindowRect frames[kMaxScreens];
+        for (int i = 0; i < count; i++) {
+            frames[i] = windowRectFromCocoa([[screens objectAtIndex:i] frame], primaryScreenHeight);
+        }
+        int index = WindowFrameScreenIndex(window, frames, count);
+        *usable = windowRectFromCocoa([[screens objectAtIndex:index] visibleFrame], primaryScreenHeight);
+        return true;
+    }
+}
+
+static void toggleFocusedWindowFill(void* unused) {
+    CFTypeRef window = copyFocusedWindow();
+    if (!window) {
+        return;
+    }
+
+    Boolean isSettable = false;
+    WindowRect frame, usable;
+    if (!windowIsFullscreen(window) &&
+        AXUIElementIsAttributeSettable(window, kAXSizeAttribute, &isSettable) == kAXErrorSuccess && isSettable &&
+        copyWindowFrame(window, &frame) && usableFrameForWindow(frame, &usable)) {
+        if (!savedWindowFrames) {
+            savedWindowFrames = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                                                          &kCFTypeDictionaryValueCallBacks);
+        }
+        if (!WindowFrameIsFilled(frame, usable, kFilledTolerance)) {
+            if (CFDictionaryGetCount(savedWindowFrames) >= kMaxSavedWindowFrames) {
+                CFDictionaryRemoveAllValues(savedWindowFrames);
+            }
+            CFDataRef saved = CFDataCreate(kCFAllocatorDefault, (const UInt8*)&frame, sizeof(frame));
+            CFDictionarySetValue(savedWindowFrames, window, saved);
+            CFRelease(saved);
+            setWindowFrame(window, usable);
+        } else {
+            CFDataRef saved = CFDictionaryGetValue(savedWindowFrames, window);
+            WindowRect restored = WindowFrameCenteredShrink(usable, 2.0 / 3);
+            if (saved && CFDataGetLength(saved) == sizeof(restored)) {
+                CFDataGetBytes(saved, CFRangeMake(0, sizeof(restored)), (UInt8*)&restored);
+            }
+            CFDictionaryRemoveValue(savedWindowFrames, window);
+            setWindowFrame(window, restored);
+        }
+    }
+    CFRelease(window);
+}
+
+static void toggleFocusedWindowFullscreen(void* unused) {
+    CFTypeRef window = copyFocusedWindow();
+    if (!window) {
         return;
     }
 
