@@ -94,7 +94,31 @@ static void fullscreenTap(void)
          "four fingers resting past the time limit don't toggle full screen");
 
   expect(TAPS_WITH(&fullscreen, 4, {4, 0, 0}, {5, 0, 0.03}, {4, 0, 0.06}, {0, 0, 0.1}) == 0,
-         "a fifth finger cancels the four-finger tap");
+         "a fifth finger cancels the four-finger tap when five isn't configured");
+}
+
+static void fillAndFullscreenTaps(void)
+{
+  GestureSettings both = defaults;
+  both.fillFingers = 4;
+  both.fullscreenFingers = 5;
+
+  expect(TAPS_WITH(&both, 4, {4, 0, 0}, {4, 0, 0.05}, {0, 0, 0.1}) == 1,
+         "a quick four-finger tap fills");
+
+  expect(TAPS_WITH(&both, 5, {5, 0, 0}, {5, 0, 0.05}, {0, 0, 0.1}) == 1,
+         "a quick five-finger tap toggles full screen");
+
+  expect(TAPS_WITH(&both, 5, {3, 0, 0}, {4, 0, 0.03}, {5, 0, 0.06}, {4, 0, 0.09}, {0, 0, 0.12}) == 1 &&
+         TAPS_WITH(&both, 4, {3, 0, 0}, {4, 0, 0.03}, {5, 0, 0.06}, {4, 0, 0.09}, {0, 0, 0.12}) == 0 &&
+         TAPS(&both, {3, 0, 0}, {4, 0, 0.03}, {5, 0, 0.06}, {4, 0, 0.09}, {0, 0, 0.12}) == 0,
+         "fingers growing to five make only a five-finger tap");
+
+  expect(TAPS(&both, {3, 0, 0}, {3, 0, 0.05}, {0, 0, 0.1}) == 1,
+         "a three-finger tap still middle-clicks with fill and full screen on");
+
+  expect(TAPS_WITH(&both, 5, {5, 0, 0}, {6, 0, 0.03}, {5, 0, 0.06}, {0, 0, 0.1}) == 0,
+         "a sixth finger cancels the five-finger tap");
 }
 
 static void clickMode(void)
@@ -123,6 +147,7 @@ int main(void)
 {
   tapMode();
   fullscreenTap();
+  fillAndFullscreenTaps();
   clickMode();
   return failures != 0;
 }

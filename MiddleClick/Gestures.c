@@ -3,7 +3,21 @@
 
 static bool IsTapFingerCount(const GestureSettings* settings, int nFingers)
 {
-  return nFingers == settings->fingers || (settings->fullscreenFingers > 0 && nFingers == settings->fullscreenFingers);
+  return nFingers == settings->fingers ||
+         (settings->fillFingers > 0 && nFingers == settings->fillFingers) ||
+         (settings->fullscreenFingers > 0 && nFingers == settings->fullscreenFingers);
+}
+
+static int MaxTapFingers(const GestureSettings* settings)
+{
+  int max = settings->fingers;
+  if (settings->fillFingers > max) {
+    max = settings->fillFingers;
+  }
+  if (settings->fullscreenFingers > max) {
+    max = settings->fullscreenFingers;
+  }
+  return max;
 }
 
 int TapFrameCompletesTapWithFingers(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp)
@@ -29,8 +43,7 @@ int TapFrameCompletesTapWithFingers(TapState* tap, const GestureSettings* settin
     tap->mayStart = false;
   }
 
-  int maxTapFingers = settings->fullscreenFingers > settings->fingers ? settings->fullscreenFingers : settings->fingers;
-  if (nFingers > maxTapFingers) {
+  if (nFingers > MaxTapFingers(settings)) {
     tap->mayStart = false;
     tap->fingers = 0;
   }

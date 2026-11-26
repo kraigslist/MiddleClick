@@ -6,6 +6,7 @@
 
 typedef struct {
   int fingers;
+  int fillFingers;
   int fullscreenFingers;
   float maxDistanceDelta;
   double maxTimeDelta;
