@@ -9,6 +9,7 @@
   NSMenuItem* accessibilityPermissionActionItem;
   NSMenuItem* infoItem;
   NSMenuItem* tapToClickItem;
+  NSMenuItem* fullscreenTapItem;
 }
 - (id)initWithController:(Controller*)ctrl;
 - (void)setChecks;

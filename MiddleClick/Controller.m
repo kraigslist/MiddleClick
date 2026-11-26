@@ -1,6 +1,7 @@
 #import "Controller.h"
 #import "Gestures.h"
 #import "PreferenceKeys.h"
+#import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 
 int previousFingerCount;
@@ -232,8 +233,11 @@ static void loadTouchSettings(void)
 {
   @autoreleasepool {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    int fingers = (int)[defaults integerForKey:kFingersNum];
+    int fullscreenFingers = [defaults boolForKey:kFullscreenTap] ? (int)[defaults integerForKey:kFullscreenFingers] : 0;
     gestureSettings = (GestureSettings){
-      .fingers = (int)[defaults integerForKey:kFingersNum],
+      .fingers = fingers,
+      .fullscreenFingers = fullscreenFingers == fingers ? 0 : fullscreenFingers,
       .maxDistanceDelta = [defaults floatForKey:kMaxDistanceDelta],
       .maxTimeDelta = [defaults integerForKey:kMaxTimeDeltaMs] / 1000.0,
     };
@@ -250,7 +254,15 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   
   if (needToClick) {
     click.fingersDown = nFingers == gestureSettings.fingers;
-  } else if (TapFrameCompletesTapWithFingers(&tap, &gestureSettings, data, nFingers, timestamp) == gestureSettings.fingers) {
+  }
+
+  int tapFingers = TapFrameCompletesTapWithFingers(&tap, &gestureSettings, data, nFingers, timestamp);
+  if (tapFingers == 0) {
+    return 0;
+  }
+  if (tapFingers == gestureSettings.fullscreenFingers) {
+    dispatch_async_f(dispatch_get_main_queue(), NULL, toggleFocusedWindowFullscreen);
+  } else if (!needToClick) {
     CGEventRef ourEvent = CGEventCreate(NULL);
     CGPoint ourLoc = CGEventGetLocation(ourEvent);
     CFRelease(ourEvent);
@@ -306,6 +318,49 @@ static void postMouseEvent(CGEventType eventType, CGMouseButton buttonType, CGPo
     CGEventRef mouseEvent = CGEventCreateMouseEvent(NULL, eventType, ourLoc, buttonType);
     CGEventPost(kCGHIDEventTap, mouseEvent);
     CFRelease(mouseEvent);
+}
+
+static void postFullscreenShortcut(void) {
+    for (int isKeyDown = 1; isKeyDown >= 0; isKeyDown--) {
+        CGEventRef keyEvent = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_F, isKeyDown);
+        CGEventSetFlags(keyEvent, kCGEventFlagMaskControl | kCGEventFlagMaskCommand);
+        CGEventPost(kCGHIDEventTap, keyEvent);
+        CFRelease(keyEvent);
+    }
+}
+
+static void toggleFocusedWindowFullscreen(void* unused) {
+    if (!AXIsProcessTrusted()) {
+        return;
+    }
+
+    pid_t pid;
+    @autoreleasepool {
+        pid = [[[NSWorkspace sharedWorkspace] frontmostApplication] processIdentifier];
+    }
+    AXUIElementRef app = AXUIElementCreateApplication(pid);
+    CFTypeRef window = NULL;
+    AXError error = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &window);
+    CFRelease(app);
+    if (error != kAXErrorSuccess || !window) {
+        return;
+    }
+
+    CFStringRef fullscreenAttribute = CFSTR("AXFullScreen");
+    Boolean isSettable = false;
+    CFTypeRef isFullscreen = NULL;
+    if (AXUIElementIsAttributeSettable(window, fullscreenAttribute, &isSettable) == kAXErrorSuccess && isSettable &&
+        AXUIElementCopyAttributeValue(window, fullscreenAttribute, &isFullscreen) == kAXErrorSuccess &&
+        CFGetTypeID(isFullscreen) == CFBooleanGetTypeID()) {
+        AXUIElementSetAttributeValue(window, fullscreenAttribute,
+                                     CFBooleanGetValue(isFullscreen) ? kCFBooleanFalse : kCFBooleanTrue);
+    } else {
+        postFullscreenShortcut();
+    }
+    if (isFullscreen) {
+        CFRelease(isFullscreen);
+    }
+    CFRelease(window);
 }
 
 - (BOOL)getIsSystemTapToClickDisabled {

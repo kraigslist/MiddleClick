@@ -75,15 +75,27 @@
   [self setChecks];
 }
 
+- (void)toggleFullscreenTap:(id)sender
+{
+  [[NSUserDefaults standardUserDefaults] setBool:[sender state] != NSControlStateValueOn forKey:kFullscreenTap];
+  [self setChecks];
+}
+
 - (void)setChecks
 {
   bool clickMode = [myController getClickMode];
   NSString* clickModeInfo = clickMode ? @"Click" : @"Click or Tap";
   
-  int fingersQua = (int)[[NSUserDefaults standardUserDefaults] integerForKey:kFingersNum];
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  int fingersQua = (int)[defaults integerForKey:kFingersNum];
+  int fullscreenFingers = (int)[defaults integerForKey:kFullscreenFingers];
   
   [infoItem setTitle:[clickModeInfo stringByAppendingFormat: @" with %d Fingers", fingersQua]];
   [tapToClickItem setState:clickMode ? NSControlStateValueOff : NSControlStateValueOn];
+  
+  [fullscreenTapItem setTitle:[NSString stringWithFormat:@"Tap %d Fingers for Full Screen", fullscreenFingers]];
+  [fullscreenTapItem setState:[defaults boolForKey:kFullscreenTap] ? NSControlStateValueOn : NSControlStateValueOff];
+  fullscreenTapItem.hidden = fullscreenFingers <= 0 || fullscreenFingers == fingersQua;
 }
 
 - (void)actionQuit:(id)sender
@@ -123,6 +135,11 @@
   resetItem.alternate = YES;
   resetItem.keyEquivalentModifierMask = NSEventModifierFlagOption;
   [resetItem setTarget:self];
+  
+  fullscreenTapItem = [menu addItemWithTitle:@""
+                                      action:@selector(toggleFullscreenTap:)
+                               keyEquivalent:@""];
+  [fullscreenTapItem setTarget:self];
   
   [self setChecks];
   
