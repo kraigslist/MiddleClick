@@ -16,6 +16,7 @@
 		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
 		FAD94F9410A88A7800A520EC /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = FAD94F9310A88A7800A520EC /* Controller.m */; };
 		4D1C0A022B00000000000001 /* Gestures.c in Sources */ = {isa = PBXBuildFile; fileRef = 4D1C0A012B00000000000001 /* Gestures.c */; };
+		4D1C0A062B00000000000001 /* WindowFrame.c in Sources */ = {isa = PBXBuildFile; fileRef = 4D1C0A052B00000000000001 /* WindowFrame.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +40,8 @@
 		4D1C0A002B00000000000001 /* Gestures.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Gestures.h; path = MiddleClick/Gestures.h; sourceTree = "<group>"; };
 		4D1C0A012B00000000000001 /* Gestures.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = Gestures.c; path = MiddleClick/Gestures.c; sourceTree = "<group>"; };
 		4D1C0A032B00000000000001 /* MultitouchSupport.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MultitouchSupport.h; path = MiddleClick/MultitouchSupport.h; sourceTree = "<group>"; };
+		4D1C0A042B00000000000001 /* WindowFrame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = WindowFrame.h; path = MiddleClick/WindowFrame.h; sourceTree = "<group>"; };
+		4D1C0A052B00000000000001 /* WindowFrame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = WindowFrame.c; path = MiddleClick/WindowFrame.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +117,8 @@
 				29B97316FDCFA39411CA2CEA /* main.m */,
 				4D1C0A032B00000000000001 /* MultitouchSupport.h */,
 				9753175829D5983E0065CAA7 /* PreferenceKeys.h */,
+				4D1C0A042B00000000000001 /* WindowFrame.h */,
+				4D1C0A052B00000000000001 /* WindowFrame.c */,
 			);
 			name = "Other Sources";
 			sourceTree = "<group>";
@@ -211,6 +216,7 @@
 				75A6B6600FEE3BE90071FAC0 /* TrayMenu.m in Sources */,
 				FAD94F9410A88A7800A520EC /* Controller.m in Sources */,
 				4D1C0A022B00000000000001 /* Gestures.c in Sources */,
+				4D1C0A062B00000000000001 /* WindowFrame.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
