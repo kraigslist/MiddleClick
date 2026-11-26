@@ -6,6 +6,7 @@
 
 typedef struct {
   int fingers;
+  int fullscreenFingers;
   float maxDistanceDelta;
   double maxTimeDelta;
 } GestureSettings;
@@ -13,12 +14,13 @@ typedef struct {
 typedef struct {
   bool isTouching;
   double touchStartTime;
-  bool maybeMiddleClick;
+  bool mayStart;
+  int fingers;
   float startX, startY;
   float endX, endY;
 } TapState;
 
-bool TapFrameCompletesTap(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp);
+int TapFrameCompletesTapWithFingers(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp);
 
 typedef struct {
   bool fingersDown;

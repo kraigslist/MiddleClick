@@ -52,7 +52,7 @@ expect_test_failure MiddleClick/PreferenceKeys.h 's/DeltaDefault 0.05f/DeltaDefa
   "fingers that slide don't click" "defaults let swipes middle-click (fixed in b67c7a8, #39)"
 expect_test_failure MiddleClick/Gestures.c '/click->fingersDown = false;/d' \
   "the next click is a left click" "three-finger click got stuck (fixed in 3f3aa45)"
-expect_test_failure MiddleClick/Gestures.c 's/bool isTap = false;/bool isTap = [NSDate new] != nil;/' \
+expect_test_failure MiddleClick/Gestures.c 's/int tapFingers = 0;/int tapFingers = [NSDate new] != nil;/' \
   compile "per-frame NSDate allocation in the touch callback (fixed in 854f3e2)"
 
 expect_lint_error d9a61d0^ "Potential leak of an object stored into 'ourEvent'" "leaked CGEvents in touchCallback (fixed in d9a61d0)"

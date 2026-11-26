@@ -11,7 +11,9 @@ static void expect(bool ok, const char* name)
 }
 
 static const GestureSettings defaults = {
-  kFingersNumDefault, kMaxDistanceDeltaDefault, kMaxTimeDeltaMsDefault / 1000.0,
+  .fingers = kFingersNumDefault,
+  .maxDistanceDelta = kMaxDistanceDeltaDefault,
+  .maxTimeDelta = kMaxTimeDeltaMsDefault / 1000.0,
 };
 
 typedef struct {
@@ -21,7 +23,7 @@ typedef struct {
 } Frame;
 
 /// Slots past `fingers` hold values that change every frame, as the multitouch driver's buffer can.
-static int countTaps(const GestureSettings* settings, const Frame* frames, int count)
+static int countTaps(const GestureSettings* settings, int tapFingers, const Frame* frames, int count)
 {
   TapState tap = {0};
   int taps = 0;
@@ -32,13 +34,14 @@ static int countTaps(const GestureSettings* settings, const Frame* frames, int c
       buffer[i].normalized.pos.x = isTouching ? 0.3f + 0.1f * i + frames[f].slide : 0.05f * f;
       buffer[i].normalized.pos.y = isTouching ? 0.5f : 0.07f * f;
     }
-    taps += TapFrameCompletesTap(&tap, settings, buffer, frames[f].fingers, frames[f].time);
+    taps += TapFrameCompletesTapWithFingers(&tap, settings, buffer, frames[f].fingers, frames[f].time) == tapFingers;
   }
   return taps;
 }
 
-#define TAPS(settings, ...) \
-  countTaps(settings, (Frame[]){__VA_ARGS__}, sizeof((Frame[]){__VA_ARGS__}) / sizeof(Frame))
+#define TAPS_WITH(settings, tapFingers, ...) \
+  countTaps(settings, tapFingers, (Frame[]){__VA_ARGS__}, sizeof((Frame[]){__VA_ARGS__}) / sizeof(Frame))
+#define TAPS(settings, ...) TAPS_WITH(settings, (settings)->fingers, __VA_ARGS__)
 
 static void tapMode(void)
 {
@@ -66,6 +69,34 @@ static void tapMode(void)
          "an extra finger cancels the tap");
 }
 
+static void fullscreenTap(void)
+{
+  GestureSettings fullscreen = defaults;
+  fullscreen.fullscreenFingers = 4;
+
+  expect(TAPS_WITH(&fullscreen, 4, {4, 0, 0}, {4, 0, 0.05}, {0, 0, 0.1}) == 1,
+         "a quick four-finger tap toggles full screen");
+
+  expect(TAPS_WITH(&fullscreen, 3, {4, 0, 0}, {4, 0, 0.05}, {0, 0, 0.1}) == 0,
+         "a four-finger tap doesn't also middle-click");
+
+  expect(TAPS_WITH(&fullscreen, 4, {3, 0, 0}, {4, 0, 0.03}, {3, 0, 0.06}, {0, 0, 0.1}) == 1 &&
+         TAPS_WITH(&fullscreen, 3, {3, 0, 0}, {4, 0, 0.03}, {3, 0, 0.06}, {0, 0, 0.1}) == 0,
+         "a fourth finger landing late makes it a four-finger tap");
+
+  expect(TAPS(&fullscreen, {3, 0, 0}, {3, 0, 0.05}, {0, 0, 0.1}) == 1,
+         "a three-finger tap still middle-clicks");
+
+  expect(TAPS_WITH(&fullscreen, 4, {4, 0, 0}, {4, 0.1f, 0.05}, {0, 0, 0.1}) == 0,
+         "four fingers that slide don't toggle full screen");
+
+  expect(TAPS_WITH(&fullscreen, 4, {4, 0, 0}, {4, 0, 0.2}, {4, 0, 0.4}, {0, 0, 0.45}) == 0,
+         "four fingers resting past the time limit don't toggle full screen");
+
+  expect(TAPS_WITH(&fullscreen, 4, {4, 0, 0}, {5, 0, 0.03}, {4, 0, 0.06}, {0, 0, 0.1}) == 0,
+         "a fifth finger cancels the four-finger tap");
+}
+
 static void clickMode(void)
 {
   ClickState click = {0};
@@ -91,6 +122,7 @@ static void clickMode(void)
 int main(void)
 {
   tapMode();
+  fullscreenTap();
   clickMode();
   return failures != 0;
 }

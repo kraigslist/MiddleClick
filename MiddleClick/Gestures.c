@@ -1,49 +1,58 @@
 #include "Gestures.h"
 #include <math.h>
 
-bool TapFrameCompletesTap(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp)
+static bool IsTapFingerCount(const GestureSettings* settings, int nFingers)
 {
-  bool isTap = false;
+  return nFingers == settings->fingers || (settings->fullscreenFingers > 0 && nFingers == settings->fullscreenFingers);
+}
+
+int TapFrameCompletesTapWithFingers(TapState* tap, const GestureSettings* settings, const Finger* fingers, int nFingers, double timestamp)
+{
+  int tapFingers = 0;
 
   if (nFingers == 0) {
     double elapsedTime = tap->isTouching ? timestamp - tap->touchStartTime : 0;
     tap->isTouching = false;
-    if (tap->startX + tap->startY != 0 && elapsedTime <= settings->maxTimeDelta) {
+    if (tap->fingers > 0 && elapsedTime <= settings->maxTimeDelta) {
       float delta = fabsf(tap->startX - tap->endX) + fabsf(tap->startY - tap->endY);
-      isTap = delta < settings->maxDistanceDelta;
+      if (delta < settings->maxDistanceDelta) {
+        tapFingers = tap->fingers;
+      }
     }
+    tap->fingers = 0;
   } else if (!tap->isTouching) {
     tap->isTouching = true;
     tap->touchStartTime = timestamp;
-    tap->maybeMiddleClick = true;
-    tap->startX = 0;
-    tap->startY = 0;
-  } else if (tap->maybeMiddleClick && timestamp - tap->touchStartTime > settings->maxTimeDelta) {
-    tap->maybeMiddleClick = false;
+    tap->mayStart = true;
+    tap->fingers = 0;
+  } else if (tap->mayStart && timestamp - tap->touchStartTime > settings->maxTimeDelta) {
+    tap->mayStart = false;
   }
 
-  if (nFingers > settings->fingers) {
-    tap->maybeMiddleClick = false;
-    tap->startX = 0;
-    tap->startY = 0;
+  int maxTapFingers = settings->fullscreenFingers > settings->fingers ? settings->fullscreenFingers : settings->fingers;
+  if (nFingers > maxTapFingers) {
+    tap->mayStart = false;
+    tap->fingers = 0;
   }
 
-  if (nFingers == settings->fingers) {
+  if (IsTapFingerCount(settings, nFingers)) {
     float x = 0, y = 0;
     for (int i = 0; i < nFingers; i++) {
       x += fingers[i].normalized.pos.x;
       y += fingers[i].normalized.pos.y;
     }
-    if (tap->maybeMiddleClick) {
+    if (tap->mayStart && nFingers > tap->fingers) {
+      tap->fingers = nFingers;
       tap->startX = x;
       tap->startY = y;
-      tap->maybeMiddleClick = false;
     }
-    tap->endX = x;
-    tap->endY = y;
+    if (nFingers == tap->fingers) {
+      tap->endX = x;
+      tap->endY = y;
+    }
   }
 
-  return isTap;
+  return tapFingers;
 }
 
 bool ClickBecomesMiddle(ClickState* click, bool isButtonDown)

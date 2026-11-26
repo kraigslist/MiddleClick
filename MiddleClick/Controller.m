@@ -250,7 +250,7 @@ int touchCallback(int device, Finger* data, int nFingers, double timestamp,
   
   if (needToClick) {
     click.fingersDown = nFingers == gestureSettings.fingers;
-  } else if (TapFrameCompletesTap(&tap, &gestureSettings, data, nFingers, timestamp)) {
+  } else if (TapFrameCompletesTapWithFingers(&tap, &gestureSettings, data, nFingers, timestamp) == gestureSettings.fingers) {
     CGEventRef ourEvent = CGEventCreate(NULL);
     CGPoint ourLoc = CGEventGetLocation(ourEvent);
     CFRelease(ourEvent);
